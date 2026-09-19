@@ -127,6 +127,23 @@ char gammamsg[5+13][26+2] =
     GAMMALVL4
 };
 
+#ifdef PS3_BUILD
+// [PS3] Short labels for the 18 gamma2table levels, dark to light. The
+// gammamsg[] strings ("Gamma correction level 0.50") are too long for a
+// menu line, and the raw numbers mislead: gammalevels[] feeds
+// pow(j/255, 1/level), so 0.50 squares the value and darkens.
+static const char *const ps3_gamma_names[18] =
+{
+    "Darkest",
+    "Darker 8", "Darker 7", "Darker 6", "Darker 5",
+    "Darker 4", "Darker 3", "Darker 2", "Darker 1",
+    "Off",
+    "Brighter 1", "Brighter 2", "Brighter 3", "Brighter 4",
+    "Brighter 5", "Brighter 6", "Brighter 7",
+    "Brightest"
+};
+#endif
+
 // we are going to be entering a savegame string
 int			saveStringEnter;              
 int             	saveSlot;	// which slot to save in
@@ -263,6 +280,12 @@ static int  M_StringHeight(const char *string);
 static void M_StartMessage(const char *string, void *routine, boolean input);
 static void M_ClearMenus (void);
 
+#ifdef PS3_BUILD
+// The three sensitivity cvars come from i_joystick.h; this one is added
+// by i_ps3joystick.c and has no header of its own.
+extern int joystick_look_invert;
+#endif
+
 // [crispy] Crispness menu
 static void M_CrispnessCur(int choice);
 static void M_CrispnessNext(int choice);
@@ -273,6 +296,11 @@ static void M_DrawCrispness3(void);
 static void M_DrawCrispness4(void);
 
 
+
+#ifdef PS3_BUILD
+// [PS3] Previous joystick button mask, for edge detection in M_Responder.
+static int menu_last_joybuttons = 0;
+#endif
 
 //
 // DOOM MENU
@@ -411,7 +439,11 @@ menuitem_t OptionsMenu[]=
     {3,"M_DETAIL",	M_ChangeDetail,'g', "Graphic Detail: "},
     {2,"M_SCRNSZ",	M_SizeDisplay,'s', "Screen Size"},
     {-1,"",0,'\0'},
+#ifdef PS3_BUILD
+    {1,"M_MSENS",	M_Mouse,'j', "Joystick Sensitivity"},
+#else
     {1,"M_MSENS",	M_Mouse,'m', "Mouse Sensitivity"}, // [crispy] mouse sensitivity menu
+#endif
     {1,"M_SVOL",	M_Sound,'s', "Sound Volume"},
     {1,"M_CRISPY",	M_CrispnessCur,'c', "Crispness"} // [crispy] Crispness menu
 };
@@ -468,8 +500,15 @@ enum
     crispness_widescreen,
     crispness_uncapped,
     crispness_fpslimit,
+#ifdef PS3_BUILD
+    crispness_gamma,
+#endif
+#ifndef PS3_BUILD
+    // [PS3] RSX drives the scanout directly and the blit is a fixed GPU
+    // scale, so neither of these has anything to toggle.
     crispness_vsync,
     crispness_smoothscaling,
+#endif
     crispness_sep_rendering_,
 
     crispness_sep_visual,
@@ -493,8 +532,13 @@ static menuitem_t Crispness1Menu[]=
     {3,"",	M_CrispyToggleWidescreen,'w'},
     {3,"",	M_CrispyToggleUncapped,'u'},
     {4,"",	M_CrispyToggleFpsLimit,'f'},
+#ifdef PS3_BUILD
+    {3,"",	M_CrispyToggleGamma,'g'},
+#endif
+#ifndef PS3_BUILD
     {3,"",	M_CrispyToggleVsync,'v'},
     {3,"",	M_CrispyToggleSmoothScaling,'s'},
+#endif
     {-1,"",0,'\0'},
     {-1,"",0,'\0'},
     {3,"",	M_CrispyToggleColoredhud,'c'},
@@ -862,9 +906,17 @@ static void M_DrawSaveLoadBottomLine(void)
   dp_translation = cr[CR_GOLD];
 
   if (savepage > 0)
+#ifdef PS3_BUILD
+    M_WriteText(LoadDef.x, y, "< D-PAD");
+#else
     M_WriteText(LoadDef.x, y, "< PGUP");
+#endif
   if (savepage < savepage_max)
+#ifdef PS3_BUILD
+    M_WriteText(LoadDef.x+(SAVESTRINGSIZE-6)*8, y, "D-PAD >");
+#else
     M_WriteText(LoadDef.x+(SAVESTRINGSIZE-6)*8, y, "PGDN >");
+#endif
 
   M_snprintf(pagestr, sizeof(pagestr), "page %d/%d", savepage + 1, savepage_max + 1);
   M_WriteText(ORIGWIDTH/2-M_StringWidth(pagestr)/2, y, pagestr);
@@ -1447,6 +1499,36 @@ static void M_DrawMouse(void)
 {
     char mouse_menu_text[48];
 
+#ifdef PS3_BUILD
+    // The M_MSENS patch reads "MOUSE SENSITIVITY", so draw a text title
+    // instead. 21 is the thermo width; the cvars run 0-20, where 10 is
+    // 1.0x (g_game.c scales by sensitivity/10).
+    M_WriteText(60, LoadDef_y + 6, "JOYSTICK SENSITIVITY");
+
+    M_WriteText(MouseDef.x, MouseDef.y + LINEHEIGHT * mouse_horiz + 6,
+                "TURN SPEED (RIGHT STICK)");
+    M_DrawThermo(MouseDef.x, MouseDef.y + LINEHEIGHT * mouse_empty1,
+                 21, joystick_turn_sensitivity);
+
+    M_WriteText(MouseDef.x, MouseDef.y + LINEHEIGHT * mouse_horiz2 + 6,
+                "MOVE SPEED (LEFT STICK)");
+    M_DrawThermo(MouseDef.x, MouseDef.y + LINEHEIGHT * mouse_empty2,
+                 21, joystick_move_sensitivity);
+
+    M_WriteText(MouseDef.x, MouseDef.y + LINEHEIGHT * mouse_vert + 6,
+                "LOOK SPEED (RIGHT STICK)");
+    M_DrawThermo(MouseDef.x, MouseDef.y + LINEHEIGHT * mouse_empty3,
+                 21, joystick_look_sensitivity);
+
+    M_snprintf(mouse_menu_text, sizeof(mouse_menu_text),
+               "%sInvert Look Up/Down: %s%s", crstr[CR_NONE],
+               joystick_look_invert ? crstr[CR_GREEN] : crstr[CR_DARK],
+               joystick_look_invert ? "On" : "Off");
+    M_WriteText(MouseDef.x, MouseDef.y + LINEHEIGHT * mouse_invert + 6,
+                mouse_menu_text);
+
+    dp_translation = NULL;
+#else
     V_DrawPatchDirect (60, LoadDef_y, W_CacheLumpName(DEH_String("M_MSENS"), PU_CACHE));
 
     M_WriteText(MouseDef.x, MouseDef.y + LINEHEIGHT * mouse_horiz + 6,
@@ -1475,6 +1557,7 @@ static void M_DrawMouse(void)
                 mouse_menu_text);
 
     dp_translation = NULL;
+#endif
 }
 
 // [crispy] Crispness menu
@@ -1570,8 +1653,19 @@ static void M_DrawCrispness1(void)
     M_DrawCrispnessMultiItem(crispness_widescreen, "Aspect Ratio", multiitem_widescreen, crispy->widescreen, aspect_ratio_correct == 1);
     M_DrawCrispnessItem(crispness_uncapped, "Uncapped Framerate", crispy->uncapped, true);
     M_DrawCrispnessNumericItem(crispness_fpslimit, "Framerate Limit", crispy->fpslimit, "None", crispy->uncapped, "35");
+#ifdef PS3_BUILD
+    M_snprintf(crispy_menu_text, sizeof(crispy_menu_text),
+               "%sGamma Correction: %s%s", crstr[CR_NONE], crstr[CR_GREEN],
+               ps3_gamma_names[crispy->gamma]);
+    M_WriteText(currentMenu->x,
+                currentMenu->y + CRISPY_LINEHEIGHT * crispness_gamma,
+                crispy_menu_text);
+#endif
+
+#ifndef PS3_BUILD
     M_DrawCrispnessItem(crispness_vsync, "Enable VSync", crispy->vsync, !force_software_renderer);
     M_DrawCrispnessItem(crispness_smoothscaling, "Smooth Pixel Scaling", smooth_pixel_scaling, !force_software_renderer);
+#endif
 
     M_DrawCrispnessSeparator(crispness_sep_visual, "Visual");
     M_DrawCrispnessMultiItem(crispness_coloredhud, "Colorize HUD Elements", multiitem_coloredhud, crispy->coloredhud, true);
@@ -1887,6 +1981,20 @@ void M_QuitDOOM(int choice)
 
 void M_ChangeSensitivity(int choice)
 {
+#ifdef PS3_BUILD
+    switch(choice)
+    {
+      case 0:
+        if (joystick_turn_sensitivity > 0)
+            joystick_turn_sensitivity--;
+        break;
+      case 1:
+        if (joystick_turn_sensitivity < 20)
+            joystick_turn_sensitivity++;
+        break;
+    }
+    return;
+#else
     switch(choice)
     {
       case 0:
@@ -1898,10 +2006,25 @@ void M_ChangeSensitivity(int choice)
 	    mouseSensitivity++;
 	break;
     }
+#endif
 }
 
 void M_ChangeSensitivity_x2(int choice)
 {
+#ifdef PS3_BUILD
+    switch(choice)
+    {
+      case 0:
+        if (joystick_move_sensitivity > 0)
+            joystick_move_sensitivity--;
+        break;
+      case 1:
+        if (joystick_move_sensitivity < 20)
+            joystick_move_sensitivity++;
+        break;
+    }
+    return;
+#else
     switch(choice)
     {
       case 0:
@@ -1913,10 +2036,25 @@ void M_ChangeSensitivity_x2(int choice)
 	    mouseSensitivity_x2++;
 	break;
     }
+#endif
 }
 
 static void M_ChangeSensitivity_y(int choice)
 {
+#ifdef PS3_BUILD
+    switch(choice)
+    {
+      case 0:
+        if (joystick_look_sensitivity > 0)
+            joystick_look_sensitivity--;
+        break;
+      case 1:
+        if (joystick_look_sensitivity < 20)
+            joystick_look_sensitivity++;
+        break;
+    }
+    return;
+#else
     switch(choice)
     {
       case 0:
@@ -1928,12 +2066,17 @@ static void M_ChangeSensitivity_y(int choice)
 	    mouseSensitivity_y++;
 	break;
     }
+#endif
 }
 
 static void M_MouseInvert(int choice)
 {
     choice = 0;
+#ifdef PS3_BUILD
+    joystick_look_invert = !joystick_look_invert;
+#else
     mouse_y_invert = !mouse_y_invert;
+#endif
 }
 
 
@@ -2395,19 +2538,54 @@ boolean M_Responder (event_t* ev)
             }
             if (dir & JOY_DIR_LEFT)
             {
+#ifdef PS3_BUILD
+                // [PS3] Savegame pages are PGUP/PGDN on a keyboard, and
+                // the Load/Save screens already advertise "< PGUP" and
+                // "PGDN >" at the bottom -- with no way to press them.
+                // Left/right do nothing on a save slot, so they take
+                // over there.
+                key = (currentMenu == &LoadDef || currentMenu == &SaveDef)
+                    ? KEY_PGUP : key_menu_left;
+#else
                 key = key_menu_left;
+#endif
                 joywait = I_GetTime() + 5;
             }
             else if (dir & JOY_DIR_RIGHT)
             {
+#ifdef PS3_BUILD
+                key = (currentMenu == &LoadDef || currentMenu == &SaveDef)
+                    ? KEY_PGDN : key_menu_right;
+#else
                 key = key_menu_right;
+#endif
                 joywait = I_GetTime() + 5;
             }
 
 #define JOY_BUTTON_MAPPED(x) ((x) >= 0)
-#define JOY_BUTTON_PRESSED(x) (JOY_BUTTON_MAPPED(x) && (ev->data1 & (1 << (x))) != 0)
+#ifdef PS3_BUILD
+// [PS3] Edge-triggered: joywait only throttles the repeat to about 7 per
+// second, so holding a button still walks through several menus before
+// you let go. Directions are deliberately left level-triggered further
+// up, since repeating is what you want when scrolling a list.
+#define JOY_BUTTON_PRESSED(x) (JOY_BUTTON_MAPPED(x) \
+    && (ev->data1 & (1 << (x))) != 0 \
+    && (menu_last_joybuttons & (1 << (x))) == 0)
 
-            if (JOY_BUTTON_PRESSED(joybfire))
+// VBTN_* indices from i_ps3joystick.c. In game cross is Use and R2 is
+// Fire, but in menus the console convention wins: cross confirms,
+// circle backs out.
+#define PS3_MENU_CONFIRM 0   // cross
+#define PS3_MENU_BACK    2   // circle
+#define PS3_BTN_QSAVE    3   // triangle
+#define PS3_BTN_QLOAD    2   // circle
+#else
+#define JOY_BUTTON_PRESSED(x) (JOY_BUTTON_MAPPED(x) && (ev->data1 & (1 << (x))) != 0)
+#define PS3_MENU_CONFIRM joybfire
+#define PS3_MENU_BACK    joybuse
+#endif
+
+            if (JOY_BUTTON_PRESSED(PS3_MENU_CONFIRM))
             {
                 // Simulate a 'Y' keypress when Doom show a Y/N dialog with Fire button.
                 if (messageToPrint && messageNeedsInput)
@@ -2430,7 +2608,7 @@ boolean M_Responder (event_t* ev)
                 }
                 joywait = I_GetTime() + 5;
             }
-            if (JOY_BUTTON_PRESSED(joybuse))
+            if (JOY_BUTTON_PRESSED(PS3_MENU_BACK))
             {
                 // Simulate a 'N' keypress when Doom show a Y/N dialog with Use button.
                 if (messageToPrint && messageNeedsInput)
@@ -2454,6 +2632,29 @@ boolean M_Responder (event_t* ev)
             key = key_menu_activate;
             joywait = I_GetTime() + 5;
         }
+
+#ifdef PS3_BUILD
+        // Quick save/load have no joyb* binding in Doom -- they are key
+        // actions only -- so synthesise the keypress here. Guarded on
+        // !menuactive so triangle/circle keep their menu meaning while
+        // the menu is open (circle backs out).
+        if (!menuactive)
+        {
+            if (JOY_BUTTON_PRESSED(PS3_BTN_QSAVE))
+            {
+                key = key_menu_qsave;
+            }
+            else if (JOY_BUTTON_PRESSED(PS3_BTN_QLOAD))
+            {
+                key = key_menu_qload;
+            }
+        }
+
+        // Outside the menuactive guard on purpose: the state has to keep
+        // tracking while the menu is closed, or the first press after
+        // opening it reads as already-held.
+        menu_last_joybuttons = ev->data1;
+#endif
     }
     else
     {

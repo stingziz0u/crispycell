@@ -27,6 +27,8 @@
 #include "m_argv.h"
 #include "m_config.h"
 
+extern void PS3_Log(const char *fmt, ...);
+
 #ifndef DISABLE_SDL2MIXER
 
 #include "SDL_mixer.h"
@@ -88,6 +90,9 @@ static const sound_module_t *sound_modules[] =
 #ifndef DISABLE_SDL2MIXER
     &sound_sdl_module,
 #endif // DISABLE_SDL2MIXER
+#ifdef PS3_BUILD
+    &sound_ps3_module,
+#endif
     &sound_pcsound_module,
     NULL,
 };
@@ -264,26 +269,36 @@ void I_InitSound(GameMission_t mission)
         if (!nosfx)
         {
             InitSfxModule(mission);
+            PS3_Log("I_InitSound: sfx device=%d, module=%s",
+                    snd_sfxdevice,
+                    sound_module ? "OK" : "NONE (no module supports this device)");
         }
 
         if (!nomusic)
         {
             InitMusicModule();
             active_music_module = music_module;
+            PS3_Log("I_InitSound: music device=%d, module=%s",
+                    snd_musicdevice,
+                    music_module ? "OK" : "NONE");
         }
 
+#ifndef DISABLE_SDL2MIXER
         // We may also have substitute MIDIs we can load.
         if (!nomusicpacks && music_module != NULL)
         {
             music_packs_active = music_pack_module.Init();
         }
+#endif
     }
+#ifndef DISABLE_SDL2MIXER
     // [crispy] print the SDL audio backend
     {
 	const char *driver_name = SDL_GetCurrentAudioDriver();
 
 	fprintf(stderr, "I_InitSound: SDL audio driver is %s\n", driver_name ? driver_name : "none");
     }
+#endif
 }
 
 void I_ShutdownSound(void)
@@ -293,10 +308,12 @@ void I_ShutdownSound(void)
         sound_module->Shutdown();
     }
 
+#ifndef DISABLE_SDL2MIXER
     if (music_packs_active)
     {
         music_pack_module.Shutdown();
     }
+#endif
 
 #ifndef DISABLE_SDL2MIXER
     music_sdl_module.Shutdown();
@@ -420,6 +437,7 @@ void I_ShutdownMusic(void)
 
 void I_SetMusicVolume(int volume)
 {
+    PS3_Log("I_SetMusicVolume: %d", volume);
     if (music_module != NULL)
     {
         music_module->SetMusicVolume(volume);
@@ -471,6 +489,7 @@ void *I_RegisterSong(void *data, int len)
     // valid substitution for this track. If there is, we set the
     // active_music_module pointer to the music pack module for the
     // duration of this particular track.
+#ifndef DISABLE_SDL2MIXER
     if (music_packs_active)
     {
         void *handle;
@@ -482,6 +501,7 @@ void *I_RegisterSong(void *data, int len)
             return handle;
         }
     }
+#endif
 
 
     if (!IsMid(data, len) && !IsMus(data, len))
@@ -495,6 +515,9 @@ void *I_RegisterSong(void *data, int len)
     }
 
     // No substitution for this track, so use the main module.
+    PS3_Log("I_RegisterSong: len=%d mid=%d mus=%d modulo=%s",
+            len, IsMid(data, len), IsMus(data, len),
+            music_module ? "OPL" : "NULL");
     active_music_module = music_module;
     if (active_music_module != NULL)
     {

@@ -21,7 +21,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef PS3_BUILD
 #include "SDL_stdinc.h"
+#endif
 
 #include "doomtype.h"
 #include "d_iwad.h"

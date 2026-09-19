@@ -22,7 +22,9 @@
 
 #include "doomtype.h"
 
+#ifndef PS3_BUILD
 #include "SDL.h"
+#endif
 
 
 #define MAX_MOUSE_BUTTONS 8
@@ -53,8 +55,10 @@ void I_StartTextInput(int x1, int y1, int x2, int y2);
 // (if one is used).
 void I_StopTextInput(void);
 
+#ifndef PS3_BUILD
 void I_HandleKeyboardEvent(SDL_Event *sdlevent);
 void I_HandleMouseEvent(SDL_Event *sdlevent);
+#endif
 
 
 #endif

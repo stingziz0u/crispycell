@@ -35,8 +35,54 @@ option(CMAKE_FIND_PACKAGE_PREFER_CONFIG
 
 option(ENABLE_SDL2_NET "Enable SDL2_net" On)
 option(ENABLE_SDL2_MIXER "Enable SDL2_mixer" On)
+option(PS3_BUILD "Cross-compile for PS3 (PSL1GHT), no SDL2" OFF)
 
-if (NOT DEFINED EMSCRIPTEN)
+if(PS3_BUILD)
+    set(ENABLE_SDL2_NET OFF CACHE BOOL "" FORCE)
+    set(ENABLE_SDL2_MIXER OFF CACHE BOOL "" FORCE)
+    add_library(SDL2::SDL2 INTERFACE IMPORTED)
+    add_library(SDL2::SDL2main INTERFACE IMPORTED)
+    add_compile_definitions(PS3_BUILD=1)
+
+    # Read the package identity from ps3/appid.mk, the same file
+    # Makefile.crispypkg includes, so the paths compiled into the binary
+    # always match the APPID the .pkg installs under.
+    # Re-run cmake when appid.mk changes. file(STRINGS) reads it but
+    # does not register it as a dependency, so without this a switch
+    # from one game to another leaves every already-built object with
+    # the previous PS3_GAME_* define -- the launcher would still say
+    # CRISPY HEXEN in a Strife build.
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+                 "${PROJECT_SOURCE_DIR}/ps3/appid.mk")
+
+    file(STRINGS "${PROJECT_SOURCE_DIR}/ps3/appid.mk" _ps3_appid_lines)
+    foreach(_line IN LISTS _ps3_appid_lines)
+        if(_line MATCHES "^PS3_APPID[ \t]*:=[ \t]*(.+)$")
+            string(STRIP "${CMAKE_MATCH_1}" PS3_APPID)
+        endif()
+    endforeach()
+    if(NOT PS3_APPID)
+        message(FATAL_ERROR "PS3_APPID not found in ps3/appid.mk")
+    endif()
+    string(LENGTH "${PS3_APPID}" _appid_len)
+    if(NOT _appid_len EQUAL 9)
+        message(FATAL_ERROR "PS3_APPID '${PS3_APPID}' is ${_appid_len} chars, must be exactly 9")
+    endif()
+    foreach(_line IN LISTS _ps3_appid_lines)
+        if(_line MATCHES "^PS3_GAME[ \t]*:=[ \t]*(.+)$")
+            string(STRIP "${CMAKE_MATCH_1}" PS3_GAME)
+        endif()
+    endforeach()
+    if(NOT PS3_GAME)
+        set(PS3_GAME "doom")
+    endif()
+    string(TOUPPER "${PS3_GAME}" _ps3_game_upper)
+    add_compile_definitions(PS3_GAME_${_ps3_game_upper}=1)
+    message(STATUS "PS3 APPID: ${PS3_APPID}  GAME: ${PS3_GAME}")
+    add_compile_definitions(PS3_USRDIR="/dev_hdd0/game/${PS3_APPID}/USRDIR")
+endif()
+
+if (NOT DEFINED EMSCRIPTEN AND NOT PS3_BUILD)
     find_package(SDL2 2.0.14)
 endif()
 if(ENABLE_SDL2_MIXER)
@@ -101,6 +147,16 @@ configure_file(src/setup-res.rc.in src/setup-res.rc)
 configure_file(src/setup/setup-manifest.xml.in src/setup/setup-manifest.xml)
 configure_file(src/strife-res.rc.in src/strife-res.rc)
 
-foreach(SUBDIR textscreen opl pcsound src)
+# textscreen is the SDL-based text UI (the setup program, and Heretic's
+# and Hexen's startup screens). Nothing in the PS3 build links it -- it
+# is already out of EXTRA_LIBS -- but compiling the subdirectory still
+# needs SDL headers that do not exist here.
+if(PS3_BUILD)
+    set(CRISPY_SUBDIRS opl pcsound src)
+else()
+    set(CRISPY_SUBDIRS textscreen opl pcsound src)
+endif()
+
+foreach(SUBDIR ${CRISPY_SUBDIRS})
     add_subdirectory("${SUBDIR}")
 endforeach()

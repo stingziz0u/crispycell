@@ -38,6 +38,16 @@
 
 #include "v_trans.h" // [crispy] dp_translation
 #include "crispy.h"
+#ifdef PS3_BUILD
+// joystick_look_invert comes from i_ps3joystick.c; the three
+// sensitivity cvars are already declared in i_joystick.h.
+extern int joystick_look_invert;
+
+// [PS3] For CrispyGamma below: W_CacheLumpName + PU_CACHE. i_video.h is
+// already included above for I_SetPalette.
+#include "w_wad.h"
+#include "z_zone.h"
+#endif
 
 // MACROS ------------------------------------------------------------------
 
@@ -333,7 +343,11 @@ static Menu_t SkillMenu = {
 static MenuItem_t OptionsItems[] = {
     {ITT_EFUNC, "END GAME", SCEndGame, 0, MENU_NONE},
     {ITT_LRFUNC2, "MESSAGES : ", SCMessages, 0, MENU_NONE},
+#ifdef PS3_BUILD
+    {ITT_SETMENU, "JOYSTICK SENSITIVITY...", NULL, 0, MENU_MOUSE},
+#else
     {ITT_SETMENU, "MOUSE SENSITIVITY...", NULL, 0, MENU_MOUSE},
+#endif
     {ITT_SETMENU, "MORE...", NULL, 0, MENU_OPTIONS2},
     {ITT_SETMENU, "CRISPNESS...", NULL, 0, MENU_CRISPNESS1}
 };
@@ -347,6 +361,15 @@ static Menu_t OptionsMenu = {
 };
 
 static MenuItem_t MouseItems[] = {
+#ifdef PS3_BUILD
+    {ITT_LRFUNC, "TURN SPEED", SCMouseSensi, 0, MENU_NONE},
+    {ITT_EMPTY, NULL, NULL, 0, MENU_NONE},
+    {ITT_LRFUNC, "MOVE SPEED", SCMouseSensiX2, 0, MENU_NONE},
+    {ITT_EMPTY, NULL, NULL, 0, MENU_NONE},
+    {ITT_LRFUNC, "LOOK SPEED", SCMouseSensiY, 0, MENU_NONE},
+    {ITT_EMPTY, NULL, NULL, 0, MENU_NONE},
+    {ITT_LRFUNC2, "INVERT LOOK :", SCMouseInvertY, 0, MENU_NONE},
+#else
     {ITT_LRFUNC, "HORIZONTAL : TURN", SCMouseSensi, 0, MENU_NONE},
     {ITT_EMPTY, NULL, NULL, 0, MENU_NONE},
     {ITT_LRFUNC, "HORIZONTAL : STRAFE", SCMouseSensiX2, 0, MENU_NONE},
@@ -354,6 +377,7 @@ static MenuItem_t MouseItems[] = {
     {ITT_LRFUNC, "VERTICAL", SCMouseSensiY, 0, MENU_NONE},
     {ITT_EMPTY, NULL, NULL, 0, MENU_NONE},
     {ITT_LRFUNC2, "INVERT Y AXIS :", SCMouseInvertY, 0, MENU_NONE},
+#endif
 };
 
 static Menu_t MouseMenu = {
@@ -384,13 +408,56 @@ static int crispnessmenupage;
 
 #define NUM_CRISPNESS_MENUS 3
 
+#ifdef PS3_BUILD
+// [PS3] Short labels for the 18 gamma2table levels, dark to light. The
+// gammamsg[] strings are too long for a menu line, and the numbers in
+// gammalevels[] mislead: they feed pow(j/255, 1/level), so 0.50 squares
+// the value and darkens.
+static const char *const ps3_gamma_names[18] =
+{
+    "DARKEST",
+    "DARKER 8", "DARKER 7", "DARKER 6", "DARKER 5",
+    "DARKER 4", "DARKER 3", "DARKER 2", "DARKER 1",
+    "OFF",
+    "BRIGHTER 1", "BRIGHTER 2", "BRIGHTER 3", "BRIGHTER 4",
+    "BRIGHTER 5", "BRIGHTER 6", "BRIGHTER 7",
+    "BRIGHTEST"
+};
+
+static void CrispyGamma(int option)
+{
+    if (option == RIGHT_DIR)
+    {
+        crispy->gamma = (crispy->gamma + 1) % 18;
+    }
+    else
+    {
+        crispy->gamma = (crispy->gamma + 17) % 18;
+    }
+
+    // Rebuild the palette now so the change shows while the menu is
+    // still open -- the same call the F11 handler makes.
+    I_SetPalette(W_CacheLumpName("PLAYPAL", PU_CACHE));
+}
+#endif
+
 static MenuItem_t Crispness1Items[] = {
     {ITT_LRFUNC2, "HIGH RESOLUTION RENDERING:", CrispyHires, 0, MENU_NONE},
     {ITT_LRFUNC2, "ASPECT RATIO:", CrispyToggleWidescreen, 0, MENU_NONE},
+#ifndef PS3_BUILD
+    // [PS3] Both are SDL renderer concepts: vsync is requested when the
+    // renderer is created, smooth scaling is an SDL texture filter. The
+    // RSX scans out in sync already and the blit to 720p is a fixed GPU
+    // scale, so neither has anything to toggle here.
     {ITT_LRFUNC2, "SMOOTH PIXEL SCALING:", CrispySmoothing, 0, MENU_NONE},
+#endif
     {ITT_LRFUNC2, "UNCAPPED FRAMERATE:", CrispyUncapped, 0, MENU_NONE},
     {ITT_NUMFUNC, "FRAMERATE LIMIT:", CrispyFpsLimit, 0, MENU_NONE},
+#ifdef PS3_BUILD
+    {ITT_LRFUNC2, "GAMMA CORRECTION:", CrispyGamma, 0, MENU_NONE},
+#else
     {ITT_LRFUNC2, "ENABLE VSYNC:", CrispyVsync, 0, MENU_NONE},
+#endif
     {ITT_EMPTY, NULL, NULL, 0, MENU_NONE},
     {ITT_EMPTY, NULL, NULL, 0, MENU_NONE},
     {ITT_LRFUNC2, "BRIGHTMAPS:", CrispyBrightmaps, 0, MENU_NONE},
@@ -405,7 +472,11 @@ static MenuItem_t Crispness1Items[] = {
 static Menu_t Crispness1Menu = {
     68, 35,
     DrawCrispnessMenu,
+#ifdef PS3_BUILD
+    14, Crispness1Items,
+#else
     15, Crispness1Items,
+#endif
     0,
     MENU_OPTIONS
 };
@@ -1082,9 +1153,17 @@ static void DrawSaveLoadBottomLine(const Menu_t *menu)
     }
     dp_translation = cr[CR_GOLD];
     if (savepage > 0)
+#ifdef PS3_BUILD
+        MN_DrTextA("- D-PAD", menu->x + 1, y);
+#else
         MN_DrTextA("- PGUP", menu->x + 1, y);
+#endif
     if (savepage < SAVEPAGE_MAX)
+#ifdef PS3_BUILD
+        MN_DrTextA("D-PAD +", menu->x + width - MN_TextAWidth("D-PAD +"), y);
+#else
         MN_DrTextA("PGDN +", menu->x + width - MN_TextAWidth("PGDN +"), y);
+#endif
 
     M_snprintf(pagestr, sizeof(pagestr), "PAGE %d/%d", savepage + 1, SAVEPAGE_MAX + 1);
     MN_DrTextA(pagestr, ORIGWIDTH / 2 - MN_TextAWidth(pagestr) / 2, y);
@@ -1613,6 +1692,19 @@ static void SCSkill(int option)
 
 static void SCMouseSensi(int option)
 {
+#ifdef PS3_BUILD
+    if (option == RIGHT_DIR)
+    {
+        if (joystick_turn_sensitivity < 15)
+        {
+            joystick_turn_sensitivity++;
+        }
+    }
+    else if (joystick_turn_sensitivity)
+    {
+        joystick_turn_sensitivity--;
+    }
+#else
     if (option == RIGHT_DIR)
     {
         if (mouseSensitivity < 255)
@@ -1624,6 +1716,7 @@ static void SCMouseSensi(int option)
     {
         mouseSensitivity--;
     }
+#endif
 }
 
 //---------------------------------------------------------------------------
@@ -1634,6 +1727,19 @@ static void SCMouseSensi(int option)
 
 static void SCMouseSensiX2(int option)
 {
+#ifdef PS3_BUILD
+    if (option == RIGHT_DIR)
+    {
+        if (joystick_move_sensitivity < 15)
+        {
+            joystick_move_sensitivity++;
+        }
+    }
+    else if (joystick_move_sensitivity)
+    {
+        joystick_move_sensitivity--;
+    }
+#else
     if (option == RIGHT_DIR)
     {
         if (mouseSensitivity_x2 < 255)
@@ -1645,6 +1751,7 @@ static void SCMouseSensiX2(int option)
     {
         mouseSensitivity_x2--;
     }
+#endif
 }
 
 //---------------------------------------------------------------------------
@@ -1655,6 +1762,19 @@ static void SCMouseSensiX2(int option)
 
 static void SCMouseSensiY(int option)
 {
+#ifdef PS3_BUILD
+    if (option == RIGHT_DIR)
+    {
+        if (joystick_look_sensitivity < 15)
+        {
+            joystick_look_sensitivity++;
+        }
+    }
+    else if (joystick_look_sensitivity)
+    {
+        joystick_look_sensitivity--;
+    }
+#else
     if (option == RIGHT_DIR)
     {
         if (mouseSensitivity_y < 255)
@@ -1666,6 +1786,7 @@ static void SCMouseSensiY(int option)
     {
         mouseSensitivity_y--;
     }
+#endif
 }
 
 //---------------------------------------------------------------------------
@@ -1676,7 +1797,11 @@ static void SCMouseSensiY(int option)
 
 static void SCMouseInvertY(int option)
 {
+#ifdef PS3_BUILD
+    joystick_look_invert = !joystick_look_invert;
+#else
     mouse_y_invert = !mouse_y_invert;
+#endif
 }
 
 //---------------------------------------------------------------------------
@@ -2019,6 +2144,13 @@ static void CrispyReturnToMenu()
 //
 //---------------------------------------------------------------------------
 
+#ifdef PS3_BUILD
+// [PS3] Previous joystick button mask, for edge detection in
+// MN_Responder. File scope because the macro that reads it is defined
+// inside the MenuActive block but used from other branches too.
+static int menu_last_joybuttons = 0;
+#endif
+
 boolean MN_Responder(event_t * event)
 {
     int key;
@@ -2099,19 +2231,51 @@ boolean MN_Responder(event_t * event)
             }
             if (dir & JOY_DIR_LEFT)
             {
+#ifdef PS3_BUILD
+                // [PS3] Savegame pages are PGUP/PGDN on a keyboard, and
+                // the Load/Save screens already advertise them at the
+                // bottom -- with no way to press them. Left/right do
+                // nothing on a save slot, so they take over there.
+                key = (CurrentMenu == &LoadMenu || CurrentMenu == &SaveMenu)
+                    ? KEY_PGUP : key_menu_left;
+#else
                 key = key_menu_left;
+#endif
                 joywait = I_GetTime() + 5;
             }
             else if (dir & JOY_DIR_RIGHT)
             {
+#ifdef PS3_BUILD
+                key = (CurrentMenu == &LoadMenu || CurrentMenu == &SaveMenu)
+                    ? KEY_PGDN : key_menu_right;
+#else
                 key = key_menu_right;
+#endif
                 joywait = I_GetTime() + 5;
             }
 
 #define JOY_BUTTON_MAPPED(x) ((x) >= 0)
-#define JOY_BUTTON_PRESSED(x) (JOY_BUTTON_MAPPED(x) && (event->data1 & (1 << (x))) != 0)
+#ifdef PS3_BUILD
+// [PS3] Edge-triggered, same as doom/m_menu.c and heretic/mn_menu.c:
+// joywait only throttles the repeat to about 7 a second, so holding a
+// button still walks through several menus before you let go. The stick
+// and d-pad directions above stay level-triggered, since repeating is
+// what you want when scrolling a list.
+#define JOY_BUTTON_PRESSED(x) (JOY_BUTTON_MAPPED(x) \
+    && (event->data1 & (1 << (x))) != 0 \
+    && (menu_last_joybuttons & (1 << (x))) == 0)
 
-            if (JOY_BUTTON_PRESSED(joybfire))
+// VBTN_* indices from i_ps3joystick.c. Cross is Use in game, but menus
+// follow the console convention: cross confirms, circle backs out.
+#define PS3_MENU_CONFIRM 0   // cross
+#define PS3_MENU_BACK    2   // circle
+#else
+#define JOY_BUTTON_PRESSED(x) (JOY_BUTTON_MAPPED(x) && (event->data1 & (1 << (x))) != 0)
+#define PS3_MENU_CONFIRM joybfire
+#define PS3_MENU_BACK    joybuse
+#endif
+
+            if (JOY_BUTTON_PRESSED(PS3_MENU_CONFIRM))
             {
                 // Simulate pressing "Enter" when we are supplying a save slot name
                 if (FileMenuKeySteal)
@@ -2129,7 +2293,7 @@ boolean MN_Responder(event_t * event)
                 }
                 joywait = I_GetTime() + 5;
             }
-            if (JOY_BUTTON_PRESSED(joybuse))
+            if (JOY_BUTTON_PRESSED(PS3_MENU_BACK))
             {
                 // If user was entering a save name, back out
                 if (FileMenuKeySteal)
@@ -2145,13 +2309,13 @@ boolean MN_Responder(event_t * event)
         }
         else if (askforquit)
         {
-            if (JOY_BUTTON_PRESSED(joybfire))
+            if (JOY_BUTTON_PRESSED(PS3_MENU_CONFIRM))
             {
                 // Simulate a 'Y' keypress
                 key = key_menu_confirm;
                 joywait = I_GetTime() + 5;
             }
-            if (JOY_BUTTON_PRESSED(joybuse))
+            if (JOY_BUTTON_PRESSED(PS3_MENU_BACK))
             {
                 // Simulate a 'N' keypress
                 key = key_menu_abort;
@@ -2162,8 +2326,19 @@ boolean MN_Responder(event_t * event)
         {
             MN_ActivateMenu();
             joywait = I_GetTime() + 5;
+#ifdef PS3_BUILD
+            menu_last_joybuttons = event->data1;
+#endif
             return true;
         }
+
+#ifdef PS3_BUILD
+        // Outside the MenuActive guard on purpose: the state has to keep
+        // tracking while the menu is closed, or the first press after
+        // opening it reads as already-held. Also repeated inside the
+        // joybmenu block above, which returns before reaching here.
+        menu_last_joybuttons = event->data1;
+#endif
     }
     else // [crispy] allow menu control with the mouse
     {
@@ -3089,12 +3264,20 @@ static void DrawSlider(Menu_t * menu, int item, int width, int slot)
 static void DrawMouseMenu(void)
 {
 
+#ifdef PS3_BUILD
+    DrawSlider(&MouseMenu, 1, 16, joystick_turn_sensitivity);
+    DrawSlider(&MouseMenu, 3, 16, joystick_move_sensitivity);
+    DrawSlider(&MouseMenu, 5, 16, joystick_look_sensitivity);
+
+    MN_DrTextB(joystick_look_invert ? "ON" : "OFF", 226, 135);
+#else
     DrawSlider(&MouseMenu, 1, 16, mouseSensitivity);
     DrawSlider(&MouseMenu, 3, 16, mouseSensitivity_x2);
     DrawSlider(&MouseMenu, 5, 16, mouseSensitivity_y);
 
     // Invert mouse y
     MN_DrTextB(mouse_y_invert ? "ON" : "OFF", 226, 135);
+#endif
 }
 
 //---------------------------------------------------------------------------
@@ -3198,6 +3381,35 @@ static void DrawCrispness1(void)
     // Widescreen
     DrawCrispnessMultiItem(crispy->widescreen, 164, 45, multiitem_widescreen, false);
 
+#ifdef PS3_BUILD
+    // [PS3] Rows are ITEM_HEIGHT/2 = 10px apart starting at
+    // Crispness1Menu.y (35). Dropping smooth scaling moves everything
+    // below it up by 10; gamma then takes the row vsync used to have.
+    // These coordinates track the item array by hand -- nothing derives
+    // them from the index.
+
+    // Uncapped framerate
+    DrawCrispnessItem(crispy->uncapped, 217, 55);
+
+    // Framerate limit
+    DrawCrispnessNumericItem(crispy->fpslimit, 181, 65, "NONE", !crispy->uncapped, "35");
+
+    // Gamma correction
+    dp_translation = cr[CR_GREEN];
+    MN_DrTextA(ps3_gamma_names[crispy->gamma], 215, 75);
+    dp_translation = NULL;
+
+    DrawCrispnessSubheader("VISUAL", 95);
+
+    // Brightmaps
+    DrawCrispnessMultiItem(crispy->brightmaps, 150, 105, multiitem_brightmaps, false);
+
+    // Smooth Diminishing Lighting
+    DrawCrispnessItem(crispy->smoothlight, 257, 115);
+
+    // Translucency
+    DrawCrispnessMultiItem(crispy->translucency, 218, 125, multiitem_translucency, false);
+#else
     // Smooth pixel scaling
     DrawCrispnessItem(smooth_pixel_scaling, 216, 55);
 
@@ -3220,6 +3432,7 @@ static void DrawCrispness1(void)
 
     // Translucency
     DrawCrispnessMultiItem(crispy->translucency, 218, 135, multiitem_translucency, false);
+#endif
 }
 
 static void DrawCrispness2(void)

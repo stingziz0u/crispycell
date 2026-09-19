@@ -39,6 +39,14 @@ char *M_getenv(const char *name);
 boolean M_WriteFile(const char *name, const void *source, int length);
 int M_ReadFile(const char *name, byte **buffer);
 void M_MakeDirectory(const char *dir);
+#ifdef PS3_BUILD
+// Base directory for anything we need to write at runtime. Per-game:
+// change the APPID when porting Heretic/Hexen/Strife.
+#ifndef PS3_WRITABLE_DIR
+#define PS3_WRITABLE_DIR PS3_USRDIR
+#endif
+#endif
+
 char *M_TempFile(const char *s);
 boolean M_FileExists(const char *file);
 char *M_FileCaseExists(const char *file);

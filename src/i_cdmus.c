@@ -18,7 +18,9 @@
 
 #include <stdio.h>
 
+#ifndef PS3_BUILD
 #include "SDL.h"
+#endif
 
 #include "doomtype.h"
 

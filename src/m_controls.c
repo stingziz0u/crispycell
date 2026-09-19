@@ -216,29 +216,106 @@ int key_menu_reloadlevel = 0; // [crispy]
 // Joystick controls
 //
 
+#ifdef PS3_BUILD
+// [PS3] DualShock 3 layout. The numbers are the VBTN_* indices that
+// i_ps3joystick.c packs into ev.data1, not physical pad bits:
+//   0 cross  1 square  2 circle  3 triangle  4 L1  5 R1
+//   6 L2     7 R2      8 L3      9 R3       10 select  11 start
+//   12 d-pad up  13 d-pad down  14 d-pad left  15 d-pad right
+int joybfire = 7;                  // R2
+#else
 int joybfire = 0;
+#endif
+#ifdef PS3_BUILD
+int joybstrafe = -1;               // strafe is on the left stick
+#else
 int joybstrafe = 1;
+#endif
+#ifdef PS3_BUILD
+int joybuse = 0;                   // cross
+#else
 int joybuse = 3;
+#endif
+#ifdef PS3_BUILD
+int joybspeed = 6;                 // L2
+#else
 int joybspeed = 2;
+#endif
 
+#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN)
+// L1/R1 carry the inventory in these games; the left stick already
+// gives a strafe axis, so the dedicated buttons are not needed.
 int joybstrafeleft = -1;
 int joybstraferight = -1;
+#elif defined(PS3_BUILD)
+int joybstrafeleft = 4;            // L1
+int joybstraferight = 5;           // R1
+#else
+int joybstrafeleft = -1;
+int joybstraferight = -1;
+#endif
 
+#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN)
+int joybjump = 2;                  // circle
+#elif defined(PS3_BUILD)
+int joybjump = 1;                  // square
+#else
 int joybjump = -1;
+#endif
 
+#ifdef PS3_BUILD
+int joybprevweapon = 13;           // d-pad down
+#else
 int joybprevweapon = -1;
+#endif
+#ifdef PS3_BUILD
+int joybnextweapon = 12;           // d-pad up
+#else
 int joybnextweapon = -1;
+#endif
 
+#ifdef PS3_BUILD
+int joybmenu = 11;                 // start
+#else
 int joybmenu = -1;
+#endif
+#ifdef PS3_BUILD
+int joybautomap = 10;              // select
+#else
 int joybautomap = -1;
+#endif
 
+#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN)
+int joybuseartifact = 1;    // square
+#else
 int joybuseartifact = -1;
+#endif
+#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN)
+int joybinvleft = 4;        // L1
+#else
 int joybinvleft = -1;
+#endif
+#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN)
+int joybinvright = 5;       // R1
+#else
 int joybinvright = -1;
+#endif
 
+#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN)
+int joybflyup = 9;          // R3
+#else
 int joybflyup = -1;
+#endif
+#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN)
+int joybflydown = 8;        // L3
+#else
 int joybflydown = -1;
+#endif
+#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN)
+int joybflycenter = 3;      // triangle
+#else
 int joybflycenter = -1;
+#endif
 
 // Control whether if a mouse button is double clicked, it acts like 
 // "use" has been pressed

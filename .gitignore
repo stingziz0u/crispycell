@@ -65,3 +65,9 @@ GTAGS
 # clangd settings
 /.cache/clangd
 compile_commands.json
+
+# PS3 port
+*.pkg
+*.self
+*.elf
+/ps3/appid.mk

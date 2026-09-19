@@ -26,6 +26,16 @@
 #include "r_defs.h" // [crispy] laserpatch
 #include "r_sky.h" // [crispy] R_InitSkyMap()
 
+#ifdef PS3_BUILD
+// [PS3] For M_CrispyToggleGamma below: DEH_String, W_CacheLumpName +
+// PU_CACHE, and I_SetPalette. None of the other toggles here touch the
+// palette, so these are not pulled in already.
+#include "deh_str.h"
+#include "w_wad.h"
+#include "z_zone.h"
+#include "i_video.h"
+#endif
+
 #include "m_crispy.h"
 
 multiitem_t multiitem_bobfactor[NUM_BOBFACTORS] =
@@ -340,6 +350,28 @@ static void M_CrispyToggleSkyHook (void)
     players[consoleplayer].lookdir = 0;
     R_InitSkyMap();
 }
+
+#ifdef PS3_BUILD
+// [PS3] Gamma has always been here (i_ps3video.c indexes
+// gamma2table[crispy->gamma] like the SDL backend does), but the only
+// way to change it was F11, and there is no keyboard. 18 levels, dark
+// to light, with index 9 the uncorrected palette.
+void M_CrispyToggleGamma(int choice)
+{
+    if (choice == 0)
+    {
+        crispy->gamma = (crispy->gamma + 17) % 18;
+    }
+    else
+    {
+        crispy->gamma = (crispy->gamma + 1) % 18;
+    }
+
+    // Rebuild the palette now so the change shows while the menu is
+    // still open -- the same call the F11 handler makes.
+    I_SetPalette(W_CacheLumpName(DEH_String("PLAYPAL"), PU_CACHE));
+}
+#endif
 
 void M_CrispyToggleFpsLimit(int choice)
 {

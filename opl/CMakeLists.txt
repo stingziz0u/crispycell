@@ -5,7 +5,7 @@ add_library(opl STATIC
             opl_obsd.c
             opl_queue.c     opl_queue.h
             opl_sdl.c
-            opl_timer.c     opl_timer.h
+            opl_ps3.c
             opl_win32.c
             ioperm_sys.c    ioperm_sys.h
             opl3.c          opl3.h
@@ -21,7 +21,7 @@ if (DEFINED EMSCRIPTEN)
         set_target_properties(opl PROPERTIES COMPILE_FLAGS "-s USE_SDL=2")
         set_target_properties(opl PROPERTIES LINK_FLAGS "-s USE_SDL=2")
     endif()
-else()
+elseif(NOT PS3_BUILD)
     target_link_libraries(opl SDL2::SDL2)
     if(ENABLE_SDL2_MIXER)
         target_link_libraries(opl SDL2_mixer::SDL2_mixer)

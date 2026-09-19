@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef PS3_BUILD
 #include "SDL.h"
 #include "SDL_opengl.h"
 
@@ -2120,3 +2121,5 @@ const pixel_t I_MapRGB (const uint8_t r, const uint8_t g, const uint8_t b)
 	return SDL_MapRGB(argbbuffer->format, r, g, b);
 }
 #endif
+
+#endif // PS3_BUILD

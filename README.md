@@ -1,135 +1,316 @@
-# Crispy Doom
-[![Crispy Doom Icon](https://github.com/fabiangreffrath/crispy-doom/blob/master/data/doom.png)](https://github.com/fabiangreffrath/crispy-doom)
+# CrispyCell
 
-[![Top Language](https://img.shields.io/github/languages/top/fabiangreffrath/crispy-doom.svg)](https://github.com/fabiangreffrath/crispy-doom)
-[![Code Size](https://img.shields.io/github/languages/code-size/fabiangreffrath/crispy-doom.svg)](https://github.com/fabiangreffrath/crispy-doom)
-[![License](https://img.shields.io/github/license/fabiangreffrath/crispy-doom.svg?logo=gnu)](https://github.com/fabiangreffrath/crispy-doom/blob/master/COPYING.md)
-[![Release](https://img.shields.io/github/release/fabiangreffrath/crispy-doom.svg)](https://github.com/fabiangreffrath/crispy-doom/releases)
-[![Release Date](https://img.shields.io/github/release-date/fabiangreffrath/crispy-doom.svg)](https://github.com/fabiangreffrath/crispy-doom/releases)
-[![Downloads](https://img.shields.io/github/downloads/fabiangreffrath/crispy-doom/latest/total.svg)](https://github.com/fabiangreffrath/crispy-doom/releases)
-[![Commits](https://img.shields.io/github/commits-since/fabiangreffrath/crispy-doom/latest.svg)](https://github.com/fabiangreffrath/crispy-doom/commits/master)
-[![Last Commit](https://img.shields.io/github/last-commit/fabiangreffrath/crispy-doom.svg)](https://github.com/fabiangreffrath/crispy-doom/commits/master)
-[![Build Status](https://github.com/fabiangreffrath/crispy-doom/actions/workflows/main.yml/badge.svg)](https://github.com/fabiangreffrath/crispy-doom/actions/workflows/main.yml)
+A native homebrew port of [Crispy Doom](https://github.com/fabiangreffrath/crispy-doom)
+for the PS3 — Doom, Heretic and Hexen.
 
-Crispy Doom is a limit-removing enhanced-resolution Doom source port based on [Chocolate Doom](https://www.chocolate-doom.org/wiki/index.php/Chocolate_Doom).
+## Lineage
 
-Its name means that its internal 640x400 resolution looks "crisp" and is also a [slight reference](http://www.mathsisfun.com/recipie.html) to its origin.
-
-## Synopsis
-
-Crispy Doom is a friendly fork of [Chocolate Doom](https://www.chocolate-doom.org/wiki/index.php/Chocolate_Doom) that provides a higher display resolution, removes the [static limits](https://doomwiki.org/wiki/Static_limits) of the Doom engine and offers further optional visual, tactical and physical enhancements while remaining entirely config file, savegame, netplay and demo compatible with the original.
-
-## Objectives and features
-
-Crispy Doom is a source port that aims to provide a faithful Doom gaming experience while also featuring some user-requested improvements and enhancements. It is forked off of Chocolate Doom to take advantage of its free and open-source code base, portability, accuracy and compatibility with Vanilla Doom.
-
-Its core features are:
-
- * Enhanced 640x400 display resolution, with the original 320x200 resolution still available in the "High Resolution Rendering: Off" mode.
- * Widescreen rendering for using all the available horizontal space of screens with aspect ratios up to 24:9.
- * Uncapped rendering framerate with interpolation and optional vertical synchronization (VSync) with the screen refresh rate.
- * Intermediate gamma correction levels (0.5, 1.5, 2.5 and 3.5).
- * Removal of all static engine limits, or at least raising of the less crucial ones.
- * Full support for the "Doom Classic" WADs shipped with the "Doom 3: BFG Edition", especially the "No Rest For The Living" episode shipped in the NERVE.WAD file.
- * Support for all versions of John Romero's Episode 5: Sigil for Ultimate Doom.
-
-Furthermore, the following optional user-visible and audible features are available:
-
- * Jumping.
- * Free vertical looking, including mouse look and vertical aiming.
- * Aiming support by a crosshair that may get directly rendered into the game world.
- * A new minimal Crispy HUD, displaying only the status bar numbers.
- * Clean Screenshot feature, enabling to take screenshots without HUD elements and even without status bar numbers and weapon sprites at higher screen sizes.
- * Colorized status bar numbers, HUD texts and blood sprites for certain monsters.
- * Translucency for certain sprites and status bar elements in the Crispy HUD.
- * Randomly mirrored death animations and corpse sprites.
- * Command line options to allow for playing with flipped player weapon sprites and/or entirely flipped level geometry.
- * Players may walk over or under monsters and hanging corpses.
- * Centered Weapons when firing, weapon recoil thrust and pitch.
- * Reports whenever a secret is revealed.
- * Level statistics and extended coloring in the Automap.
- * Playing sounds in full length, and misc. other sound fixes.
- * Demo recording and/or playback timers and progress bar.
- * Demo continue, fast-forward and take-over features, handing controls over to the player when demo playback is finished or interrupted.
-
-Most of these features are disabled by default and need to get enabled either in the in-game "Crispness" menu, in the crispy-doom-setup tool or as command line parameters. They are implemented in a way that preserves demo-compatibility with Vanilla Doom and network game compatibility with Chocolate Doom. Furthermore, Crispy Doom's savegames and config files are compatible, though not identical (see the [Compatibility section in the Wiki](https://github.com/fabiangreffrath/crispy-doom/wiki/Compatibility), to Vanilla Doom's. 
-
-Crispy Doom strives for maximum compatibility with all "limit-removing Vanilla" maps -- but not Boom or ZDoom maps. More specifically, Crispy Doom supports some select advanced features such as [ANIMATED](https://doomwiki.org/wiki/ANIMATED) and [SWITCHES](https://doomwiki.org/wiki/SWITCHES) lumps, MBF sky transfers, SMMU swirling flats and [MUSINFO](https://doomwiki.org/wiki/MUSINFO) -- but neither generalized linedef and sector types nor DECORATE and MAPINFO.
-
-Many additional less user-visible features have been implemented, e.g. fixed engine limitations and crashes, fixed rendering bugs, fixed harmless game logic bugs, full support for DEHACKED files and lumps in BEX format, additional and improved cheat codes, an improved Automap, and many more! Due to the extra DEHACKED states added from [MBF](https://doomwiki.org/wiki/MBF), Crispy Doom supports [enhancer](https://www.doomworld.com/forum/topic/84859-black-ops-smooth-weapons-dehacked-mod) [mods](https://www.doomworld.com/forum/topic/85991-smoothed-smooth-monsters-for-doom-retro-and-crispy-doom) that can make the gameplay even more pleasing to the eyes. For a detailed list of features and changes please refer to the release notes below.
-
-## Download
-
-* Windows: [Get binaries of the latest release](https://github.com/fabiangreffrath/crispy-doom/releases/latest), compatible with both x86 and x64 editions.
-* MacOS: Use MacPorts: `sudo port install crispy-doom` or Homebrew: `brew install crispy-doom`.
-* Linux: To install on Ubuntu (“Eoan Ermine” 19.10 and later)/Debian (“Buster” 10 and later) based systems: `sudo apt-get install crispy-doom`
-
-
-The most recent list of changes can be found in the [Changelog](https://github.com/fabiangreffrath/crispy-doom/blob/master/CHANGELOG.md).
-A complete history of changes and releases can be found in the [Wiki](https://github.com/fabiangreffrath/crispy-doom/wiki/Changelog-History) or on the [Releases](https://github.com/fabiangreffrath/crispy-doom/releases) page.
-
-Daily builds of Crispy Doom can be found here:
-http://latest.chocolate-doom.org/
-
-Crispy Doom can play nearly all variants of Doom. If you don't own any, you may download the [Shareware version of Doom](http://cdn.debian.net/debian/pool/non-free/d/doom-wad-shareware/doom-wad-shareware_1.9.fixed.orig.tar.gz), extract it and copy the DOOM1.WAD file into your Crispy Doom directory. Alternatively, you may want to play Crispy Doom with [Freedoom](https://www.chocolate-doom.org/wiki/index.php/Freedoom) and a MegaWAD.
-### Sources
-[![Open Hub](https://www.openhub.net/p/crispy-doom/widgets/project_thin_badge?style=flat&format=gif)](https://www.openhub.net/p/crispy-doom)
-
-The Crispy Doom source code is available at GitHub: https://github.com/fabiangreffrath/crispy-doom.
-It can be [downloaded in either ZIP or TAR.GZ format](https://github.com/fabiangreffrath/crispy-doom/releases) 
-or cloned via
+Crispy Doom is a limit-removing enhanced source port of Doom, Heretic, Hexen
+and Strife, built on Chocolate Doom's faithful reimplementation of the
+original 1997 source release. This project adds a full PS3 platform layer on
+top of it: RSX video, libaudio sound and music, DualShock 3 input, and a WAD
+launcher built for a console.
 
 ```
- git clone https://github.com/fabiangreffrath/crispy-doom.git
+Doom (id Software, 1997) -> Chocolate Doom -> Crispy Doom -> CrispyCell (this project)
 ```
 
+## Features
 
- * Brief instructions to set up a build system on Windows can be found [in the Crispy Doom Wiki](https://github.com/fabiangreffrath/crispy-doom/wiki/Building-on-Windows). A much more detailed guide is provided [in the Chocolate Doom Wiki](https://www.chocolate-doom.org/wiki/index.php/Building_Chocolate_Doom_on_Windows), but applies to Crispy Doom as well for most parts.
- * There are also instructions for building on [Linux](https://github.com/fabiangreffrath/crispy-doom/wiki/Building-on-Linux) and [MacOS](https://github.com/fabiangreffrath/crispy-doom/wiki/Building-on-Mac)
+- **Video:** 640x400 internal render, GPU-scaled to the display by the RSX
+  with triple buffering. Correct aspect ratio with pillarboxing, plus
+  optional 16:10, 16:9 and 21:9 widescreen that widens the field of view
+  rather than stretching the picture.
+- **Audio:** native 48000 Hz through libaudio. OPL3 music emulation and a
+  from-scratch SFX mixer, sharing a single audio port.
+- **Input:** DualShock 3, both sticks, every button mapped. Adjustable
+  turn/move/look sensitivity from the in-game menu.
+- **WAD launcher:** scans for what you installed and lists each playable
+  thing as its own entry — base games and add-ons alike — pairing every
+  add-on with the base game it needs. Skipped entirely when there is only
+  one thing to play.
+- **Gamma correction from the menu**, since F11 is not reachable without a
+  keyboard and Hexen in particular is dark on a modern panel.
+- Clean exit to the XMB from the in-game Quit option or the PS button.
 
+## Requirements
 
-## Documentation
+- A PS3 capable of running homebrew (HEN or CFW).
+- Your own legally-owned game data. No commercial WAD is included in this
+  repository or in any release build. The Doom package does ship the
+  freely redistributable `DOOM1.WAD` shareware.
+- To build from source: the ps3dev PSL1GHT toolchain (`ppu-gcc`, PSL1GHT
+  SDK, `make_self_npdrm`, `pkg.py`). No SDL2 is needed — this port replaces
+  it entirely.
 
- * **[New Cheat Codes](https://github.com/fabiangreffrath/crispy-doom/wiki/New-Cheats)**
- * **[New Command-Line Parameters](https://github.com/fabiangreffrath/crispy-doom/wiki/New-Command-line-Parameters)**
- * **[New Controls](https://github.com/fabiangreffrath/crispy-doom/wiki/New-Controls) (With default bindings)**
- * **[Crispness](https://github.com/fabiangreffrath/crispy-doom/wiki/Crispness-Menu)**
- * **[Compatibility](https://github.com/fabiangreffrath/crispy-doom/wiki/Compatibility)**
- * **[FAQ](https://github.com/fabiangreffrath/crispy-doom/wiki/FAQ)**
+## Installation
 
-## Contact
+Three separate packages, one per engine, each with its own APPID so they
+coexist on the XMB and keep their own savegames and configuration.
 
-The canonical homepage for Crispy Doom is https://github.com/fabiangreffrath/crispy-doom
+| Package | APPID | Installs to |
+|---|---|---|
+| `CrispyDoom-1.0.pkg` | `CRISPDOOM` | `/dev_hdd0/game/CRISPDOOM/USRDIR/` |
+| `CrispyHeretic-1.0.pkg` | `CRISPHERE` | `/dev_hdd0/game/CRISPHERE/USRDIR/` |
+| `CrispyHexen-1.0.pkg` | `CRISPHEX1` | `/dev_hdd0/game/CRISPHEX1/USRDIR/` |
 
-Crispy Doom is maintained by [Fabian Greffrath](mailto:fabian@greffXremovethisXrath.com). 
+Install from the XMB, then FTP your WADs into that folder. The launcher
+picks them up on the next boot — no configuration file to edit.
 
-Please report any bugs, glitches or crashes that you encounter to the GitHub [Issue Tracker](https://github.com/fabiangreffrath/crispy-doom/issues).
+### Doom
 
-## Acknowledgement
+Drop any of these into `CRISPDOOM/USRDIR/`:
 
-Although I have played the thought of hacking on Chocolate Doom's renderer for quite some time already, it was Brad Harding's [Doom Retro](https://www.chocolate-doom.org/wiki/index.php/Doom_Retro) that provided the incentive to finally do it. However, his fork aims at a different direction and I did not take a single line of code from it. Lee Killough's [MBF](https://doomwiki.org/wiki/WinMBF) was studied and used to debug the code, especially in the form of Team Eternity's [WinMBF](https://doomwiki.org/wiki/WinMBF) source port, which made it easier to compile and run on my machine. And of course there is fraggle's [Chocolate Doom](https://www.chocolate-doom.org/wiki/index.php/Chocolate_Doom) with its exceptionally clean and legible source code. Please let me take this opportunity to appreciate all these authors for their work!
+```
+DOOM.WAD          The Ultimate DOOM
+DOOM2.WAD         DOOM II: Hell on Earth
+TNT.WAD           Final Doom: TNT Evilution
+PLUTONIA.WAD      Final Doom: Plutonia
+DOOM1.WAD         DOOM shareware (already in the package)
+FREEDOOM1.WAD     Freedoom: Phase 1
+FREEDOOM2.WAD     Freedoom: Phase 2
+FREEDM.WAD        FreeDM
+HACX.WAD          HacX
+```
 
-Also, thanks to plums of the [Doomworld forums](https://www.doomworld.com/vb/) for beta testing, "release manager" SoDOOManiac and "art director" JNechaevsky for the continuous flow of support and inspiration during the post-3.x development cycle and (last but not the least) [Cacodemon9000](http://www.moddb.com/members/cacodemon9000) for his [Infested Outpost](http://www.moddb.com/games/doom-ii/addons/infested-outpost) map that helped to track down quite a few bugs!
+Add-ons go in the same folder and appear as their own entries, each loaded
+on top of the base game it needs:
 
-Furthermore, thanks to VGA for his aid with adding support for his two mods: [PerK & NightFright's Black Ops smooth weapons add-on converted to DEHACKED](https://www.doomworld.com/forum/topic/84859-black-ops-smooth-weapons-dehacked-mod) and [Gifty's Smooth Doom smooth monster animations converted to DEHACKED](https://www.doomworld.com/forum/topic/85991-smoothed-smooth-monsters-for-doom-retro-and-crispy-doom) that can make the gameplay even more pleasing to the eyes.
+```
+SIGIL.WAD         SIGIL           (needs DOOM.WAD)
+SIGIL2.WAD        SIGIL II        (needs DOOM.WAD)
+NERVE.WAD         No Rest for the Living   (needs DOOM2.WAD)
+MASTERLEVELS.WAD  Master Levels            (needs DOOM2.WAD)
+CHEX.WAD          Chex Quest
+CHEX2.WAD         Chex Quest 2    (needs CHEX.WAD)
+```
 
-## Legalese
+`SIGIL_SHREDS.WAD` and `SIGIL_II_MP3.WAD` are not listed separately — they
+are soundtrack replacements and load automatically alongside their episode
+when present.
 
-Doom is © 1993-1996 Id Software, Inc.; 
-Boom 2.02 is © 1999 id Software, Chi Hoang, Lee Killough, Jim Flynn, Rand Phares, Ty Halderman;
-PrBoom+ is © 1999 id Software, Chi Hoang, Lee Killough, Jim Flynn, Rand Phares, Ty Halderman,
-© 1999-2000 Jess Haas, Nicolas Kalkhof, Colin Phipps, Florian Schulze,
-© 2005-2006 Florian Schulze, Colin Phipps, Neil Stevens, Andrey Budko;
-Chocolate Doom is © 1993-1996 Id Software, Inc., © 2005 Simon Howard; 
-Chocolate Hexen is © 1993-1996 Id Software, Inc., © 1993-2008 Raven Software, © 2008 Simon Howard;
-Strawberry Doom is © 1993-1996 Id Software, Inc., © 2005 Simon Howard, © 2008-2010 GhostlyDeath; 
-Crispy Doom is additionally © 2014-2019 Fabian Greffrath;
-all of the above are released under the [GPL-2+](https://www.gnu.org/licenses/gpl-2.0.html).
+Some releases ship `NERVE.WAD` and `MASTERLEVELS.WAD` marked as IWADs
+rather than PWADs (the BFG and Unity re-releases do). Those show up as
+standalone games instead of add-ons. Both work.
 
-SDL 2.0, SDL_mixer 2.0 and SDL_net 2.0 are © 1997-2016 Sam Lantinga and are released under the [zlib license](http://www.gzip.org/zlib/zlib_license.html).
+### Heretic
 
-Secret Rabbit Code (libsamplerate) is © 2002-2011 Erik de Castro Lopo and is released under the [GPL-2+](http://www.gnu.org/licenses/gpl-2.0.html).
-Libpng is © 1998-2014 Glenn Randers-Pehrson, © 1996-1997 Andreas Dilger, © 1995-1996 Guy Eric Schalnat, Group 42, Inc. and is released under the [libpng license](http://www.libpng.org/pub/png/src/libpng-LICENSE.txt).
-Zlib is © 1995-2013 Jean-loup Gailly and Mark Adler and is released under the [zlib license](http://www.zlib.net/zlib_license.html).
+```
+HERETIC.WAD       Heretic: Shadow of the Serpent Riders
+HERETIC1.WAD      Heretic shareware
+```
 
-The Crispy Doom icon (as shown at the top of this page) has been contributed by Philip K.
+### Hexen
+
+```
+HEXEN.WAD         Hexen: Beyond Heretic
+HEXDD.WAD         Deathkings of the Dark Citadel   (needs HEXEN.WAD)
+```
+
+Filenames are matched case-insensitively, but the PS3 filesystem itself is
+case-sensitive — if a WAD is not being found, that is the first thing to
+check.
+
+## Controls
+
+### Doom
+
+| Action | Button |
+|---|---|
+| Move | Left stick |
+| Turn / look | Right stick |
+| Fire | R2 |
+| Run | L2 |
+| Use | Cross |
+| Jump | Square |
+| Strafe left / right | L1 / R1 |
+| Next / previous weapon | D-pad up / down |
+| Quicksave / quickload | Triangle / Circle |
+| Automap | Select |
+| Menu | Start |
+
+### Heretic and Hexen
+
+| Action | Button |
+|---|---|
+| Move | Left stick |
+| Turn / look | Right stick |
+| Fire | R2 |
+| Run | L2 |
+| Use | Cross |
+| Use inventory item | Square |
+| Jump | Circle |
+| Inventory left / right | L1 / R1 |
+| Fly down / up | L3 / R3 |
+| Center flight | Triangle |
+| Next / previous weapon | D-pad up / down |
+| Automap | Select |
+| Menu | Start |
+
+### In menus
+
+| Action | Button |
+|---|---|
+| Navigate | D-pad or left stick |
+| Confirm | Cross |
+| Back | Circle |
+| Open / close | Start |
+| Savegame page | D-pad left / right |
+
+Jumping only does something with "Allow Jumping" enabled in Crispness.
+
+## Rebinding
+
+There is no in-game rebinding screen. The buttons are ordinary Crispy
+settings, so they can be edited in the configuration files under
+`USRDIR/`, split across two files depending on the setting:
+
+**`default.cfg`**
+
+| Key | Default | Button |
+|---|---|---|
+| `joyb_fire` | 7 | R2 |
+| `joyb_use` | 0 | Cross |
+| `joyb_speed` | 6 | L2 |
+| `joyb_strafe` | -1 | disabled |
+
+**`crispy-doom.cfg`** (or `crispy-heretic.cfg`, `crispy-hexen.cfg`)
+
+| Key | Doom | Heretic / Hexen |
+|---|---|---|
+| `joyb_jump` | 1 (Square) | 2 (Circle) |
+| `joyb_strafeleft` | 4 (L1) | -1 |
+| `joyb_straferight` | 5 (R1) | -1 |
+| `joyb_nextweapon` | 12 (D-pad up) | 12 |
+| `joyb_prevweapon` | 13 (D-pad down) | 13 |
+| `joyb_menu_activate` | 11 (Start) | 11 |
+| `joyb_toggle_automap` | 10 (Select) | 10 |
+| `joyb_useartifact` | — | 1 (Square) |
+| `joyb_invleft` | — | 4 (L1) |
+| `joyb_invright` | — | 5 (R1) |
+| `joyb_flyup` | — | 9 (R3) |
+| `joyb_flydown` | — | 8 (L3) |
+| `joyb_flycenter` | — | 3 (Triangle) |
+
+Button indices:
+
+```
+0  Cross       6  L2         12  D-pad up
+1  Square      7  R2         13  D-pad down
+2  Circle      8  L3         14  D-pad left
+3  Triangle    9  R3         15  D-pad right
+4  L1         10  Select
+5  R1         11  Start
+```
+
+`-1` disables an action. Valid values are 0 to 19.
+
+Sensitivity lives in the same file and is adjustable from Options ->
+Joystick Sensitivity: `joystick_turn_sensitivity`,
+`joystick_move_sensitivity`, `joystick_look_sensitivity` (10 is 1.0x) and
+`joystick_look_invert`.
+
+Three things are not rebindable, because Doom has no configuration variable
+for them: quicksave and quickload (Triangle and Circle), menu confirm and
+back (Cross and Circle), and the stick axes.
+
+## Known limitations
+
+- **Savegames are shared between games that run on the same IWAD.** Chex
+  Quest and SIGIL both run as `gamemission == doom`, so their saves land in
+  the same folder as The Ultimate DOOM's and appear in each other's load
+  menus. This is upstream behaviour — Crispy picks the savegame folder from
+  the game mission rather than the WAD — and it is more visible here
+  because the launcher makes switching easy.
+- **No Strife.** The engine compiles and boots, but Strife asks you to type
+  a character name before the first game and its NPC dialogue is answered
+  with number keys. Without a keyboard there is no way past that. An
+  on-screen keyboard would be needed.
+- **No multiplayer.** The networking layer is a stub.
+- **No mouse or keyboard**, even if one is plugged in.
+- **Errors are logged, not shown.** A fatal error writes to
+  `USRDIR/crispy_log.txt` and exits to the XMB with no message on screen.
+  That log is the first place to look when something does not work.
+- **Add-ons that change only textures or sounds are not listed.** The
+  launcher decides which base game an add-on needs by looking for `ExMy` or
+  `MAPxx` maps inside it; a WAD with neither cannot be placed.
+
+## Differences from upstream Crispy Doom
+
+Beyond the platform layer, a few deliberate behaviour changes:
+
+- **Automatic loading of SIGIL, SIGIL II, NERVE and MASTERLEVELS is
+  disabled.** Upstream looks for them next to the IWAD and loads them
+  silently. On a console where every WAD shares one folder, that means
+  picking "The Ultimate DOOM" would quietly drag SIGIL in with it, title
+  graphic and extra episodes and all. The launcher decides instead.
+- **Enable VSync and Smooth Pixel Scaling are removed from the Crispness
+  menu.** Both are SDL renderer concepts with no equivalent here: the RSX
+  scans out in sync already and the blit is a fixed GPU scale.
+- **Mouse Sensitivity is replaced by Joystick Sensitivity**, and the look
+  axis no longer saturates — upstream clamps after scaling, which made the
+  vertical slider do nothing past its midpoint.
+- **Menu buttons are edge-triggered.** Upstream throttles repeats to about
+  seven a second, which on a pad means holding a button walks through
+  several menus before you let go.
+
+## Building from source
+
+The `ps3/` directory holds everything specific to this port's build:
+
+- **`crispy-ps3-toolchain.cmake`** — the CMake toolchain file. Points CMake
+  at the PPU cross-compiler and sets the link libraries. Edit `PS3DEV` at
+  the top to match your toolchain location.
+- **`appid.mk`** — the single source of truth for which engine is being
+  built and under what APPID. Read both by CMake (via `file(STRINGS)`) and
+  by the packaging Makefile, so the paths compiled into the binary can
+  never disagree with the package.
+- **`build.sh`** — builds and packages one engine end to end:
+  `./ps3/build.sh doom`, `heretic` or `hexen`. Rewrites `appid.mk`,
+  reconfigures, clears the object tree when the engine changes, builds, and
+  packages.
+- **`icons/`** — the `ICON0.PNG` for each engine's XMB entry (320x176).
+
+`Makefile.crispypkg` in the project root packages an already-built `.elf`
+into an installable `.pkg`, using `ppu_rules`' automatic targets. It does
+not compile the engine.
+
+`pkgfiles-<game>/USRDIR/` is what ships inside each package. Doom's holds
+the shareware WAD; Heretic's and Hexen's are empty, since their IWADs are
+commercial.
+
+```bash
+mkdir build-ps3 && cd build-ps3
+cmake .. -DCMAKE_TOOLCHAIN_FILE=../ps3/crispy-ps3-toolchain.cmake -DPS3_BUILD=ON
+cd ..
+./ps3/build.sh doom
+```
+
+Everything PS3-specific in the engine sits behind `PS3_BUILD`, and the
+per-engine differences behind `PS3_GAME_DOOM`, `PS3_GAME_HERETIC` and
+`PS3_GAME_HEXEN`. The new platform files are `src/i_ps3video.c`,
+`src/i_ps3sound.c`, `src/i_ps3joystick.c`, `src/i_ps3launcher.c`,
+`src/i_ps3stubs.c`, `src/i_ps3input.c`, `src/net_ps3.c` and
+`opl/opl_ps3.c`.
+
+## Credits
+
+- [Crispy Doom](https://github.com/fabiangreffrath/crispy-doom) by Fabian
+  Greffrath and contributors — the engine this project is built on.
+- [Chocolate Doom](https://github.com/chocolate-doom/chocolate-doom) by
+  Simon Howard, which Crispy Doom is based on.
+- id Software and Raven Software, for the original games and source
+  releases.
+
+## License
+
+GPLv2, inherited from Crispy Doom. See [COPYING.md](COPYING.md).
+
+No commercial game data is included in this repository. You need your own
+legally-owned copy of the games.
+
+## AI disclosure
+
+This project's code was written collaboratively with Claude (Anthropic),
+working through this port with me in real time over many sessions. Every
+bit of testing and debugging was done by me on real hardware.

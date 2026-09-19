@@ -19,8 +19,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifndef PS3_BUILD
+// [PS3] These pull in txt_sdl.h, which pulls in SDL.h. The whole
+// textscreen library is out of the PS3 build -- see CMakeLists.txt --
+// so the VGA-text startup screen below goes with them.
 #include "txt_main.h"
 #include "txt_io.h"
+#endif
 
 #include "net_client.h"
 
@@ -684,6 +689,7 @@ static int startup_line = STARTUP_WINDOW_Y;
 
 void hprintf(const char *string)
 {
+#ifndef PS3_BUILD
     if (using_graphical_startup)
     {
         TXT_BGColor(TXT_COLOR_CYAN, 0);
@@ -695,6 +701,7 @@ void hprintf(const char *string)
 
         TXT_UpdateScreen();
     }
+#endif
 
     // haleyjd: shouldn't be WATCOMC-only
     if (debugmode)
@@ -703,6 +710,9 @@ void hprintf(const char *string)
 
 void drawstatus(void)
 {
+#ifdef PS3_BUILD
+    return;
+#else
     int i;
 
     TXT_GotoXY(1, 24);
@@ -713,6 +723,7 @@ void drawstatus(void)
     {
         TXT_PutChar(smsg[i]);
     }
+#endif
 }
 
 static void status(const char *string)
@@ -746,6 +757,7 @@ void DrawThermo(void)
 
     last_progress = progress;
 
+#ifndef PS3_BUILD
     TXT_GotoXY(THERM_X, THERM_Y);
 
     TXT_FGColor(TXT_COLOR_BRIGHT_GREEN);
@@ -757,10 +769,20 @@ void DrawThermo(void)
     }
 
     TXT_UpdateScreen();
+#endif
 }
 
 void initStartup(void)
 {
+#ifdef PS3_BUILD
+    // [PS3] This is the original VGA text-mode loading screen, drawn
+    // through textscreen. No text mode here, the library is not built,
+    // and I_InitWindowTitle/Icon below belong to the i_video.c this
+    // port replaces. Every other TXT_ call in the file is already gated
+    // on using_graphical_startup, so clearing it covers the runtime.
+    using_graphical_startup = false;
+    return;
+#else
     byte *textScreen;
     byte *loading;
 
@@ -794,14 +816,17 @@ void initStartup(void)
     TXT_UpdateScreen();
 
     using_graphical_startup = true;
+#endif
 }
 
 static void finishStartup(void)
 {
+#ifndef PS3_BUILD
     if (using_graphical_startup)
     {
         TXT_Shutdown();
     }
+#endif
 }
 
 char tmsg[300];
@@ -822,11 +847,15 @@ void CheckAbortStartup(void)
     // haleyjd: removed WATCOMC
     // haleyjd FIXME: this should actually work in text mode too, but how to
     // get input before SDL video init?
+#ifndef PS3_BUILD
+    // [PS3] "Press Escape during startup to bail out". No keyboard, and
+    // TXT_GetChar would call into a library that is not linked.
     if(using_graphical_startup)
     {
         if(TXT_GetChar() == 27)
             CleanExit();
     }
+#endif
 }
 
 void IncThermo(void)

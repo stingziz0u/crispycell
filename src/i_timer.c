@@ -13,36 +13,39 @@
 // GNU General Public License for more details.
 //
 // DESCRIPTION:
-//      Timer functions.
+//      Timer functions -- PS3 native, via sysGetSystemTime()
+//      (microseconds since an arbitrary epoch), same primitive
+//      TyrQuakeCell's Sys_DoubleTime uses.
 //
 
-#include "SDL.h"
+#include <sys/systime.h>
 
 #include "i_timer.h"
 #include "m_fixed.h" // [crispy]
 #include "doomtype.h"
+
+static uint64_t basecounter = 0;
+
+static uint64_t GetUS(void)
+{
+    uint64_t now = sysGetSystemTime();
+
+    if (basecounter == 0)
+    {
+        basecounter = now;
+    }
+
+    return now - basecounter;
+}
 
 //
 // I_GetTime
 // returns time in 1/35th second tics
 //
 
-static Uint32 basetime = 0;
-static uint64_t basecounter = 0; // [crispy]
-static uint64_t basefreq = 0; // [crispy]
-
-int  I_GetTime (void)
+int I_GetTime(void)
 {
-    Uint32 ticks;
-
-    ticks = SDL_GetTicks();
-
-    if (basetime == 0)
-        basetime = ticks;
-
-    ticks -= basetime;
-
-    return (ticks * TICRATE) / 1000;    
+    return (int)((GetUS() / 1000) * TICRATE / 1000);
 }
 
 //
@@ -51,35 +54,21 @@ int  I_GetTime (void)
 
 int I_GetTimeMS(void)
 {
-    Uint32 ticks;
-
-    ticks = SDL_GetTicks();
-
-    if (basetime == 0)
-        basetime = ticks;
-
-    return ticks - basetime;
+    return (int)(GetUS() / 1000);
 }
 
 // [crispy] Get time in microseconds
 
 uint64_t I_GetTimeUS(void)
 {
-    uint64_t counter;
-
-    counter = SDL_GetPerformanceCounter();
-
-    if (basecounter == 0)
-        basecounter = counter;
-
-    return ((counter - basecounter) * 1000000ull) / basefreq;
+    return GetUS();
 }
 
 // Sleep for a specified number of ms
 
 void I_Sleep(int ms)
 {
-    SDL_Delay(ms);
+    sysUsleep((u32)ms * 1000);
 }
 
 void I_WaitVBL(int count)
@@ -87,16 +76,10 @@ void I_WaitVBL(int count)
     I_Sleep((count * 1000) / 70);
 }
 
-
 void I_InitTimer(void)
 {
-    // initialize timer
-
-    SDL_SetHint(SDL_HINT_WINDOWS_DISABLE_THREAD_NAMING, "1");
-
-    SDL_Init(SDL_INIT_TIMER);
-
-    basefreq = SDL_GetPerformanceFrequency(); // [crispy]
+    // sysGetSystemTime() needs no init; basecounter lazily latches on
+    // first read.
 }
 
 // [crispy]

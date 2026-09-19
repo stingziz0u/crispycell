@@ -65,6 +65,9 @@ extern opl_driver_t opl_openbsd_driver;
 extern opl_driver_t opl_win32_driver;
 #endif
 extern opl_driver_t opl_sdl_driver;
+#ifdef PS3_BUILD
+extern opl_driver_t opl_ps3_driver;
+#endif
 
 
 #endif /* #ifndef OPL_INTERNAL_H */

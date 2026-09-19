@@ -499,6 +499,12 @@ char *M_TempFile(const char *s)
 {
     const char *tempdir;
 
+#ifdef PS3_BUILD
+    // PS3 has no /tmp and no TMPDIR. The only writable location is the
+    // game's own USRDIR -- same place crispy_log.txt lives.
+    return M_StringJoin(PS3_WRITABLE_DIR, DIR_SEPARATOR_S, s, NULL);
+#endif
+
 #ifdef _WIN32
 
     // Check the TEMP environment variable to find the location.

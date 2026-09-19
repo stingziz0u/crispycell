@@ -642,8 +642,13 @@ static uint32_t aes_ror32(uint32_t word, unsigned int shift)
     return (word >> shift) | (word << (32 - shift));
 }
 
+#ifdef PS3_BUILD
+#define cpu_to_le32(x) __builtin_bswap32((uint32_t)(x))
+#define le32_to_cpu(x) __builtin_bswap32((uint32_t)(x))
+#else
 #define cpu_to_le32(x) SDL_SwapLE32(x)
 #define le32_to_cpu(x) SDL_SwapLE32(x)
+#endif
 
 #define star_x(x) (((x) & 0x7f7f7f7f) << 1) ^ ((((x) & 0x80808080) >> 7) * 0x1b)
 

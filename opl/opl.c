@@ -21,7 +21,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef PS3_BUILD
+#include <sys/event_queue.h>
+#else
 #include "SDL.h"
+#endif
 
 #include "opl.h"
 #include "opl_internal.h"
@@ -47,6 +51,9 @@ static opl_driver_t *drivers[] =
 #ifndef DISABLE_SDL2MIXER
     &opl_sdl_driver,
 #endif // DISABLE_SDL2MIXER
+#ifdef PS3_BUILD
+    &opl_ps3_driver,
+#endif
     NULL
 };
 
@@ -447,6 +454,56 @@ void OPL_Unlock(void)
     }
 }
 
+#ifdef PS3_BUILD
+
+typedef struct
+{
+    volatile int finished;
+    sys_event_queue_t queue;
+    sys_event_port_t port;
+} delay_data_t;
+
+static void DelayCallback(void *_delay_data)
+{
+    delay_data_t *delay_data = _delay_data;
+    delay_data->finished = 1;
+    sysEventPortSend(delay_data->port, 0, 0, 0);
+}
+
+void OPL_Delay(uint64_t us)
+{
+    delay_data_t delay_data;
+    sys_event_t event;
+    sys_event_queue_attr_t attr;
+
+    if (driver == NULL)
+    {
+        return;
+    }
+
+    delay_data.finished = 0;
+
+    memset(&attr, 0, sizeof(attr));
+    attr.attr_protocol = SYS_EVENT_QUEUE_FIFO;
+    attr.type = SYS_EVENT_QUEUE_PPU;
+    sysEventQueueCreate(&delay_data.queue, &attr, SYS_EVENT_QUEUE_KEY_LOCAL, 1);
+    sysEventPortCreate(&delay_data.port, SYS_EVENT_PORT_LOCAL, SYS_EVENT_PORT_NO_NAME);
+    sysEventPortConnectLocal(delay_data.port, delay_data.queue);
+
+    OPL_SetCallback(us, DelayCallback, &delay_data);
+
+    while (!delay_data.finished)
+    {
+        sysEventQueueReceive(delay_data.queue, &event, 20 * 1000);
+    }
+
+    sysEventPortDisconnect(delay_data.port);
+    sysEventPortDestroy(delay_data.port);
+    sysEventQueueDestroy(delay_data.queue, 0);
+}
+
+#else
+
 typedef struct
 {
     int finished;
@@ -511,6 +568,8 @@ void OPL_Delay(uint64_t us)
     SDL_DestroyMutex(delay_data.mutex);
     SDL_DestroyCond(delay_data.cond);
 }
+
+#endif // PS3_BUILD
 
 void OPL_SetPaused(int paused)
 {

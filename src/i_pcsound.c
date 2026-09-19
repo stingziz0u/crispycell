@@ -12,10 +12,14 @@
 // GNU General Public License for more details.
 //
 // DESCRIPTION:
-//	System interface for PC speaker sound.
+//      System interface for PC speaker sound.
 //
 
+#ifdef PS3_BUILD
+#include <sys/mutex.h>
+#else
 #include "SDL.h"
+#endif
 #include <string.h>
 
 #include "crispy.h"
@@ -33,7 +37,11 @@
 
 static boolean pcs_initialized = false;
 
+#ifdef PS3_BUILD
+static sys_mutex_t sound_lock;
+#else
 static SDL_mutex *sound_lock;
+#endif
 static GameMission_t gamemission;
 
 static uint8_t *current_sound_lump = NULL;
@@ -68,7 +76,11 @@ static void PCSCallbackFunc(int *duration, int *freq)
 
     *duration = 1000 / 140;
 
+#ifdef PS3_BUILD
+    if (sysMutexLock(sound_lock, 0) != 0)
+#else
     if (SDL_LockMutex(sound_lock) < 0)
+#endif
     {
         *freq = 0;
         return;
@@ -101,7 +113,11 @@ static void PCSCallbackFunc(int *duration, int *freq)
         *freq = 0;
     }
 
+#ifdef PS3_BUILD
+    sysMutexUnlock(sound_lock);
+#else
     SDL_UnlockMutex(sound_lock);
+#endif
 }
 
 static boolean CachePCSLump(sfxinfo_t *sfxinfo)
@@ -110,7 +126,7 @@ static boolean CachePCSLump(sfxinfo_t *sfxinfo)
     int headerlen;
 
     // Free the current sound lump back to the cache
- 
+
     if (current_sound_lump != NULL)
     {
         W_ReleaseLumpNum(current_sound_lump_num);
@@ -123,7 +139,7 @@ static boolean CachePCSLump(sfxinfo_t *sfxinfo)
     lumplen = W_LumpLength(sfxinfo->lumpnum);
 
     // Read header
-  
+
     if (current_sound_lump[0] != 0x00 || current_sound_lump[1] != 0x00)
     {
         return false;
@@ -145,7 +161,7 @@ static boolean CachePCSLump(sfxinfo_t *sfxinfo)
     return true;
 }
 
-// These Doom PC speaker sounds are not played - this can be seen in the 
+// These Doom PC speaker sounds are not played - this can be seen in the
 // Heretic source code, where there are remnants of this left over
 // from Doom.
 
@@ -197,7 +213,11 @@ static int I_PCS_StartSound(sfxinfo_t *sfxinfo,
         return -1;
     }
 
+#ifdef PS3_BUILD
+    if (sysMutexLock(sound_lock, 0) != 0)
+#else
     if (SDL_LockMutex(sound_lock) < 0)
+#endif
     {
         return -1;
     }
@@ -209,7 +229,11 @@ static int I_PCS_StartSound(sfxinfo_t *sfxinfo,
         current_sound_handle = channel;
     }
 
+#ifdef PS3_BUILD
+    sysMutexUnlock(sound_lock);
+#else
     SDL_UnlockMutex(sound_lock);
+#endif
 
     if (result)
     {
@@ -228,7 +252,11 @@ static void I_PCS_StopSound(int handle)
         return;
     }
 
+#ifdef PS3_BUILD
+    if (sysMutexLock(sound_lock, 0) != 0)
+#else
     if (SDL_LockMutex(sound_lock) < 0)
+#endif
     {
         return;
     }
@@ -239,8 +267,12 @@ static void I_PCS_StopSound(int handle)
     {
         current_sound_remaining = 0;
     }
-    
+
+#ifdef PS3_BUILD
+    sysMutexUnlock(sound_lock);
+#else
     SDL_UnlockMutex(sound_lock);
+#endif
 }
 
 //
@@ -301,7 +333,13 @@ static boolean I_PCS_InitSound(GameMission_t mission)
 
     if (pcs_initialized)
     {
+#ifdef PS3_BUILD
+        sys_mutex_attr_t attr;
+        sysMutexAttrInitialize(attr);
+        sysMutexCreate(&sound_lock, &attr);
+#else
         sound_lock = SDL_CreateMutex();
+#endif
     }
 
     return pcs_initialized;
@@ -343,4 +381,3 @@ const sound_module_t sound_pcsound_module =
     I_PCS_StopSound,
     I_PCS_SoundIsPlaying,
 };
-

@@ -16,6 +16,7 @@
 //
 
 
+#ifndef PS3_BUILD
 #include "SDL.h"
 #include "SDL_joystick.h"
 #include "SDL_gamecontroller.h"
@@ -824,3 +825,5 @@ void I_BindJoystickVariables(void)
     }
 }
 
+
+#endif // PS3_BUILD

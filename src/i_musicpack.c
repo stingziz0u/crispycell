@@ -22,7 +22,9 @@
 #include <string.h>
 #include <ctype.h>
 
+#ifndef DISABLE_SDL2MIXER
 #include "SDL.h"
+#endif
 
 #include "i_glob.h"
 

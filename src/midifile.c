@@ -20,6 +20,14 @@
 #include <string.h>
 #include <assert.h>
 
+#ifdef PS3_BUILD
+// PS3 is big-endian, and MIDI multi-byte fields are stored big-endian in
+// the file -- so on this host these are no-ops (same semantics as SDL's
+// own SDL_SwapBE32/16 on a big-endian platform), no swap needed.
+#define SDL_SwapBE32(x) (x)
+#define SDL_SwapBE16(x) (x)
+#endif
+
 #include "doomtype.h"
 #include "i_swap.h"
 #include "i_system.h"

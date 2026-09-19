@@ -30,7 +30,9 @@
 #include <unistd.h>
 #endif
 
+#ifndef PS3_BUILD
 #include "SDL.h"
+#endif
 
 #include "config.h"
 
@@ -131,6 +133,8 @@ byte *I_ZoneBase (int *size)
     int p;
     static int i = 1;
 
+    PS3_Log("I_ZoneBase: entered (call #%d)", i);
+
     //!
     // @category obscure
     // @arg <mb>
@@ -178,6 +182,8 @@ byte *I_ZoneBase (int *size)
 
     printf("zone memory: %p, %d MiB allocated for zone\n",
            zonemem, *size >> 20); // [crispy] human-understandable zone heap size
+
+    PS3_Log("I_ZoneBase: allocated %d MiB at %p", *size >> 20, zonemem);
 
     return zonemem;
 }
@@ -272,7 +278,9 @@ void I_Quit (void)
         entry = entry->next;
     }
 
+#ifndef PS3_BUILD
     SDL_Quit();
+#endif
 
     exit(0);
 }
@@ -285,12 +293,23 @@ void I_Quit (void)
 
 static boolean already_quitting = false;
 
+extern void PS3_Log(const char *fmt, ...);
+
 void I_Error (const char *error, ...)
 {
     char msgbuf[512];
     va_list argptr;
     atexit_listentry_t *entry;
     boolean exit_gui_popup;
+
+    {
+        va_list ps3ap;
+        char ps3buf[512];
+        va_start(ps3ap, error);
+        M_vsnprintf(ps3buf, sizeof(ps3buf), error, ps3ap);
+        va_end(ps3ap);
+        PS3_Log("!!! I_Error: %s", ps3buf);
+    }
 
     if (already_quitting)
     {
@@ -341,15 +360,21 @@ void I_Error (const char *error, ...)
     // Pop up a GUI dialog box to show the error message, if the
     // game was not run from the console (and the user will
     // therefore be unable to otherwise see the message).
+#ifndef PS3_BUILD
     if (exit_gui_popup && !I_ConsoleStdout())
     {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,
                                  PACKAGE_STRING, msgbuf, NULL);
     }
+#else
+    (void)exit_gui_popup;
+#endif
 
     // abort();
 
+#ifndef PS3_BUILD
     SDL_Quit();
+#endif
 
     exit(-1);
 }

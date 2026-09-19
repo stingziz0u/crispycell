@@ -32,6 +32,8 @@
 #include "z_zone.h"
 
 #include "opl.h"
+
+extern void PS3_Log(const char *fmt, ...);
 #include "midifile.h"
 
 // #define OPL_MIDI_DEBUG
@@ -1659,6 +1661,9 @@ static void *I_OPL_RegisterSong(void *data, int len)
     }
 
     result = MIDI_LoadFile(filename);
+
+    PS3_Log("I_OPL_RegisterSong: tmp='%s' result=%s",
+            filename, result ? "OK" : "NULL");
 
     if (result == NULL)
     {

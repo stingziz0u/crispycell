@@ -19,7 +19,9 @@
 //	Functions to blit a block to the screen.
 //
 
+#ifndef PS3_BUILD
 #include "SDL_version.h" // [crispy]
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1197,7 +1199,9 @@ void WritePNGfile(char *filename, pixel_t *data,
     rowbuf = palette; // [crispy] pointer abuse!
 
     png_set_IHDR(ppng, pinfo, width, height,
-#if SDL_VERSION_ATLEAST(2, 0, 5)
+#ifdef PS3_BUILD
+                 8, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE,
+#elif SDL_VERSION_ATLEAST(2, 0, 5)
                  8, PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE,
 #else
                  8, PNG_COLOR_TYPE_RGB_ALPHA, PNG_INTERLACE_NONE,

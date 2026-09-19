@@ -19,7 +19,9 @@
 #ifndef __I_JOYSTICK__
 #define __I_JOYSTICK__
 
+#ifndef PS3_BUILD
 #include "SDL_gamecontroller.h"
+#endif
 
 // Number of "virtual" joystick buttons defined in configuration files.
 // This needs to be at least as large as the number of different key
@@ -92,6 +94,7 @@ enum
     JOY_DIR_RIGHT = 0x8
 };
 
+#ifndef PS3_BUILD
 // Extend the SDL_GameControllerButton enum to include the triggers.
 enum
 {
@@ -99,6 +102,7 @@ enum
     GAMEPAD_BUTTON_TRIGGERRIGHT,
     GAMEPAD_BUTTON_MAX
 };
+#endif
 
 extern int use_analog;
 extern int joystick_turn_sensitivity;

@@ -20,6 +20,22 @@
 #ifndef __I_SWAP__
 #define __I_SWAP__
 
+#ifdef PS3_BUILD
+
+// PS3 (PowerPC/Cell) is always big-endian, so WAD data (stored little
+// endian) always needs swapping -- no runtime check needed, unlike
+// SDL_SwapLE16/32 which are no-ops on a little-endian host.
+
+// These are deliberately cast to signed values; this is the behaviour
+// of the macros in the original source and some code relies on it.
+
+#define SHORT(x)  ((signed short) __builtin_bswap16((unsigned short)(x)))
+#define LONG(x)   ((signed int) __builtin_bswap32((unsigned int)(x)))
+
+#define SYS_BIG_ENDIAN
+
+#else
+
 #include "SDL_endian.h"
 
 // Endianess handling.
@@ -38,6 +54,8 @@
 #if SDL_BYTEORDER == SDL_BIG_ENDIAN
 #define SYS_BIG_ENDIAN
 #endif
+
+#endif // PS3_BUILD
 
 #endif
 

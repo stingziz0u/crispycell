@@ -18,6 +18,7 @@
 
 #include <string.h>
 
+#ifndef PS3_BUILD
 #include "SDL.h"
 #include "SDL_keycode.h"
 
@@ -617,3 +618,5 @@ void I_BindInputVariables(void)
     M_BindIntVariable("mouse_threshold_y",         &mouse_threshold_y); // [crispy]
     M_BindIntVariable("mouse_y_invert",            &mouse_y_invert); // [crispy]
 }
+
+#endif // PS3_BUILD

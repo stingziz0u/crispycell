@@ -699,9 +699,21 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
         {
             if (use_analog)
             {
+#ifdef PS3_BUILD
+                // [PS3] Upstream clamps AFTER scaling, so FixedMul(2, ...)
+                // tops out at 2 steps per tic no matter what the
+                // sensitivity is -- the slider only changes how fast you
+                // reach that ceiling. Clamp the stick first, then let the
+                // sensitivity scale the result, so 10 still reproduces
+                // vanilla and 20 is twice as fast.
+                joylook = BETWEEN(-FRACUNIT, FRACUNIT, joylook);
+                look = -(2 * joystick_look_sensitivity * joylook)
+                       / (10 * FRACUNIT);
+#else
                 joylook = joylook * joystick_look_sensitivity / 10;
                 joylook = BETWEEN(-FRACUNIT, FRACUNIT, joylook);
                 look = -FixedMul(2, joylook);
+#endif
             }
             else
             {

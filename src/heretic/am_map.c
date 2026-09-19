@@ -807,6 +807,10 @@ boolean AM_Responder(event_t * ev)
     int key;
     static int bigstate = 0;
     static int joywait = 0;
+#ifdef PS3_BUILD
+    // Previous joystick mask, for the edge check on the automap toggle.
+    static int am_last_joybuttons = 0;
+#endif
     static char buffer[20]; // [crispy] to store mapmarkers
     extern boolean speedkeydown (void);
 
@@ -831,8 +835,20 @@ boolean AM_Responder(event_t * ev)
     key = ev->data1;
     rc = false;
 
+#ifdef PS3_BUILD
+    // [PS3] Edge-triggered. This function keeps its own static joywait
+    // that shadows the global one, and 5 tics only throttles the repeat
+    // to about 7 a second -- holding select made the automap flicker on
+    // and off. Requiring a release is the fix. doom/am_map.c has no such
+    // problem: it uses the global joywait, which gates the whole poll
+    // inside I_UpdateJoystick.
+    if (ev->type == ev_joystick && joybautomap >= 0
+        && (ev->data1 & (1 << joybautomap)) != 0
+        && (am_last_joybuttons & (1 << joybautomap)) == 0)
+#else
     if (ev->type == ev_joystick && joybautomap >= 0
         && (ev->data1 & (1 << joybautomap)) != 0 && joywait < I_GetTime())
+#endif
     {
         joywait = I_GetTime() + 5;
 
@@ -848,6 +864,16 @@ boolean AM_Responder(event_t * ev)
             AM_Stop ();
         }
     }
+
+#ifdef PS3_BUILD
+    // After the test, not before: the first frame of a press has to see
+    // the previous mask, and every frame after it sees the button as
+    // already down.
+    if (ev->type == ev_joystick)
+    {
+        am_last_joybuttons = ev->data1;
+    }
+#endif
 
     if (!automapactive)
     {

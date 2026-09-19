@@ -77,7 +77,9 @@ set(GAME_SOURCE_FILES
     i_flmusic.c
     i_glob.c            i_glob.h
     i_input.c           i_input.h
+    i_ps3input.c
     i_joystick.c        i_joystick.h
+    i_ps3joystick.c
                         i_swap.h
     i_musicpack.c
     i_oplmusic.c
@@ -88,6 +90,10 @@ set(GAME_SOURCE_FILES
     i_timer.c           i_timer.h
     i_truecolor.c       i_truecolor.h
     i_video.c           i_video.h
+    i_ps3video.c
+    i_ps3sound.c
+    i_ps3launcher.c
+    i_ps3stubs.c
     i_videohr.c         i_videohr.h
     i_winmusic.c
     midifallback.c      midifallback.h
@@ -108,7 +114,7 @@ set(GAME_SOURCE_FILES
     net_packet.c        net_packet.h
     net_petname.c       net_petname.h
     net_query.c         net_query.h
-    net_sdl.c           net_sdl.h
+    net_ps3.c           net_sdl.h
     net_server.c        net_server.h
     net_structrw.c      net_structrw.h
     p_mapformat.c       p_mapformat.h
@@ -152,7 +158,20 @@ set(DEHACKED_SOURCE_FILES
 set(SOURCE_FILES ${COMMON_SOURCE_FILES} ${GAME_SOURCE_FILES})
 set(SOURCE_FILES_WITH_DEH ${SOURCE_FILES} ${DEHACKED_SOURCE_FILES})
 
-set(EXTRA_LIBS ${SDL_LINK_LIBS} textscreen pcsound opl)
+if(PS3_BUILD)
+    # PSL1GHT's syscall stubs are data-indirection symbols, not ordinary
+    # functions -- aggressive inlining at -O3 was observed to break their
+    # resolution at link time (undefined reference to videoGetState etc,
+    # appearing/disappearing depending on whether PS3_RSX_Init got
+    # inlined into I_InitGraphics). Build this one file at -O1.
+    set_source_files_properties(i_ps3video.c PROPERTIES COMPILE_OPTIONS "-O1;-fno-inline")
+    list(REMOVE_ITEM GAME_SOURCE_FILES i_sdlmusic.c i_sdlsound.c net_gui.c)
+    list(REMOVE_ITEM SOURCE_FILES i_sdlmusic.c i_sdlsound.c net_gui.c)
+    list(REMOVE_ITEM SOURCE_FILES_WITH_DEH i_sdlmusic.c i_sdlsound.c net_gui.c)
+    set(EXTRA_LIBS ${SDL_LINK_LIBS} pcsound opl -lio -lrsx -lgcm_sys -laudio -lsysutil -lrt -llv2 -lm)
+else()
+    set(EXTRA_LIBS ${SDL_LINK_LIBS} textscreen pcsound opl)
+endif()
 if(SampleRate_FOUND)
     list(APPEND EXTRA_LIBS SampleRate::samplerate)
 endif()

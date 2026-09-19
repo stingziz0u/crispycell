@@ -682,6 +682,13 @@ A_FirePlasma
 fixed_t		bulletslope;
 
 
+// [PS3] How far the horizontal autoaim sweep reaches, counted in steps
+// of 5.625 degrees to each side. 1 reproduces vanilla; 3 is about 17
+// degrees, which is roughly what a thumbstick needs to feel fair.
+#ifndef PS3_AUTOAIM_STEPS
+#define PS3_AUTOAIM_STEPS 3
+#endif
+
 void P_BulletSlope (mobj_t*	mo)
 {
     angle_t	an;
@@ -698,16 +705,23 @@ void P_BulletSlope (mobj_t*	mo)
 
     if (!linetarget)
     {
-	an += 1<<26;
-	bulletslope = P_AimLineAttack (mo, an, 16*64*FRACUNIT);
-	if (!linetarget)
+	int i;
+
+	// Sweep outwards symmetrically and take the first target found,
+	// instead of vanilla's single step to each side.
+	for (i = 1; i <= PS3_AUTOAIM_STEPS; i++)
 	{
-	    an -= 2<<26;
-	    bulletslope = P_AimLineAttack (mo, an, 16*64*FRACUNIT);
-	    if (!linetarget && critical->freeaim == FREEAIM_BOTH)
-	    {
-		bulletslope = PLAYER_SLOPE(mo->player);
-	    }
+	    bulletslope = P_AimLineAttack (mo, an + (i<<26), 16*64*FRACUNIT);
+	    if (linetarget)
+		break;
+	    bulletslope = P_AimLineAttack (mo, an - (i<<26), 16*64*FRACUNIT);
+	    if (linetarget)
+		break;
+	}
+
+	if (!linetarget && critical->freeaim == FREEAIM_BOTH)
+	{
+	    bulletslope = PLAYER_SLOPE(mo->player);
 	}
     }
     }

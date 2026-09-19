@@ -2287,6 +2287,11 @@ static int G_GotoNextLevel(void)
 //
 // M_Responder
 //
+#ifdef PS3_BUILD
+// [PS3] Previous joystick button mask, for edge detection below.
+static int menu_last_joybuttons = 0;
+#endif
+
 boolean M_Responder (event_t* ev)
 {
     int             ch;
@@ -2340,8 +2345,25 @@ boolean M_Responder (event_t* ev)
     ch = 0;
     key = -1;
 
+#ifdef PS3_BUILD
+    if (ev->type == ev_joystick)
+#else
     if (ev->type == ev_joystick && joywait < I_GetTime())
+#endif
     {
+#ifdef PS3_BUILD
+        // [PS3] Snapshot before updating, so the first frame of a press
+        // sees the old mask and every frame after sees the button as
+        // already down.
+        const int menu_prev_joybuttons = menu_last_joybuttons;
+
+        menu_last_joybuttons = ev->data1;
+
+        // Directions still repeat on joywait -- that is what you want
+        // when scrolling a list. Only the buttons go edge-triggered.
+        if (joywait < I_GetTime())
+        {
+#endif
         if (JOY_GET_DPAD(ev->data6) != JOY_DIR_NONE)
         {
             dir = JOY_GET_DPAD(ev->data6);
@@ -2375,11 +2397,27 @@ boolean M_Responder (event_t* ev)
             key = key_menu_right;
             joywait = I_GetTime() + 5;
         }
+#ifdef PS3_BUILD
+        }
+#endif
 
 #define JOY_BUTTON_MAPPED(x) ((x) >= 0)
-#define JOY_BUTTON_PRESSED(x) (JOY_BUTTON_MAPPED(x) && (ev->data1 & (1 << (x))) != 0)
+#ifdef PS3_BUILD
+#define JOY_BUTTON_PRESSED(x) (JOY_BUTTON_MAPPED(x) \
+    && (ev->data1 & (1 << (x))) != 0 \
+    && (menu_prev_joybuttons & (1 << (x))) == 0)
 
-        if (JOY_BUTTON_PRESSED(joybfire))
+// VBTN_* indices from i_ps3joystick.c. Cross is Use in game, but menus
+// follow the console convention: cross confirms, circle backs out.
+#define PS3_MENU_CONFIRM 0   // cross
+#define PS3_MENU_BACK    2   // circle
+#else
+#define JOY_BUTTON_PRESSED(x) (JOY_BUTTON_MAPPED(x) && (ev->data1 & (1 << (x))) != 0)
+#define PS3_MENU_CONFIRM joybfire
+#define PS3_MENU_BACK    joybuse
+#endif
+
+        if (JOY_BUTTON_PRESSED(PS3_MENU_CONFIRM))
         {
             // Simulate a 'Y' keypress when Doom show a Y/N dialog with Fire button.
             if (messageToPrint && messageNeedsInput)
@@ -2396,7 +2434,7 @@ boolean M_Responder (event_t* ev)
             joystick_fire_countdown = 5;
             }
         }
-        if (JOY_BUTTON_PRESSED(joybuse))
+        if (JOY_BUTTON_PRESSED(PS3_MENU_BACK))
         {
             // Simulate a 'N' keypress when Doom show a Y/N dialog with Use button.
             if (messageToPrint && messageNeedsInput)

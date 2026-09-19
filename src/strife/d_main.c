@@ -33,8 +33,32 @@
 #include "dstrings.h"
 #include "sounds.h"
 
+#ifdef PS3_BUILD
+// [PS3] Strife's startup screen is the original VGA text-mode one,
+// drawn through textscreen. There is no text mode here and the library
+// is not built (see CMakeLists.txt), so stub the calls rather than
+// bracket all 22 of them. TXT_Init returning 0 makes the caller set
+// using_text_startup = false and bail before TXT_GetScreenData is ever
+// reached, so the NULL below is never dereferenced -- and D_DrawText
+// returns early on that same flag.
+#define TXT_Init()              0
+#define TXT_GetScreenData()     NULL
+#define TXT_Shutdown()          do { } while (0)
+#define TXT_UpdateScreen()      do { } while (0)
+#define TXT_GotoXY(x, y)        do { } while (0)
+#define TXT_PutChar(c)          do { } while (0)
+#define TXT_BGColor(c, b)       do { } while (0)
+#define TXT_FGColor(c)          do { } while (0)
+#define TXT_GetXY(xp, yp)       do { *(xp) = 0; *(yp) = 0; } while (0)
+#define TXT_COLOR_BLACK         0
+#define TXT_COLOR_BLUE          1
+#define TXT_COLOR_GREEN         2
+#else
 #include "txt_main.h"
+#endif
+#ifndef PS3_BUILD
 #include "txt_io.h"
+#endif
 
 #include "d_iwad.h"
 

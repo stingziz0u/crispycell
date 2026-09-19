@@ -278,6 +278,17 @@ static boolean LoadSigil2Wad (const char *iwaddir, boolean pwadtexture)
 // [crispy] auto-load Sigil and Sigil II if available
 void D_LoadSigilWads (void)
 {
+#ifdef PS3_BUILD
+    // [PS3] The launcher owns what gets loaded. Crispy looks for
+    // SIGIL.WAD next to the IWAD (M_DirName(iwadfile)) and adds it
+    // unconditionally -- note -noautoload does NOT cover this, it only
+    // gates the autoload *directories* further down in LoadSigilWad.
+    // On a console every WAD shares one folder, so without this the
+    // plain "The Ultimate DOOM" entry always drags SIGIL in with it,
+    // title graphic, extra episodes and all. The launcher passes SIGIL
+    // on -file for the entry that actually wants it.
+    return;
+#else
     int i, j;
     boolean sigilloaded, sigil2loaded;
     boolean pwadtexture = false;
@@ -313,6 +324,7 @@ void D_LoadSigilWads (void)
     }
 
     free(iwaddir);
+#endif // PS3_BUILD
 }
 
 // [crispy] check if NERVE.WAD is already loaded as a PWAD
@@ -442,8 +454,10 @@ void D_LoadNerveWad (void)
 	// [crispy] check if NERVE.WAD is already loaded as a PWAD
 	if (!CheckNerveLoaded())
 	{
+#ifndef PS3_BUILD
 		// [crispy] else auto-load NERVE.WAD if available
 		CheckLoadNerve();
+#endif
 	}
 }
 
@@ -797,8 +811,15 @@ static void LoadMasterlevelsWads (void)
 void D_LoadMasterlevelsWad (void)
 {
 	// [crispy] check if the single MASTERLEVELS.WAD is already loaded as a PWAD
+	// [PS3] This check stays: it is what recognises the MASTERLEVELS.WAD
+	// the launcher passed on -file and sets gamemission = pack_master.
+	// Only the auto-load branch below is cut -- searching for the file
+	// ourselves would load it into plain DOOM II, and the 20-separate-
+	// PWADs fallback is a pile of disk probes for files that are never
+	// going to be there on a console.
 	if (!CheckMasterlevelsLoaded())
 	{
+#ifndef PS3_BUILD
 		// [crispy] else auto-load the single MASTERLEVELS.WAD if available
 		if (!CheckLoadMasterlevels())
 		{
@@ -809,5 +830,6 @@ void D_LoadMasterlevelsWad (void)
 				LoadMasterlevelsWads();
 			}
 		}
+#endif
 	}
 }

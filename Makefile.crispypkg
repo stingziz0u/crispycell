@@ -1,0 +1,38 @@
+#
+# Packages an already-built Crispy PS3 .elf into an installable
+# .pkg, using ppu_rules' automatic targets (strip + sprxlinker +
+# signing + package_finalize). Does NOT compile the engine -- run the
+# cmake/make step from ps3/crispy-ps3-toolchain.cmake first, from the
+# build-ps3 directory, then run this from that same directory with
+# crispy-doom present.
+#
+include /usr/local/ps3dev/ppu_rules
+
+# Package identity comes from ps3/appid.mk, which CMakeLists.txt also
+# reads -- see the comment there. firstword of MAKEFILE_LIST is this
+# file even though make is invoked with -f from build-ps3/src, so the
+# include path resolves regardless of cwd.
+CRISPY_ROOT := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
+include $(CRISPY_ROOT)ps3/appid.mk
+
+# CMake names the executables crispy-doom, crispy-heretic and so on, so
+# the target follows PS3_GAME straight from appid.mk.
+TARGET    := crispy-$(PS3_GAME)
+TITLE     := $(PS3_TITLE)
+APPID     := $(PS3_APPID)
+CONTENTID := UP0001-$(APPID)_00-0000000000000001
+# Per-game package contents. pkgfiles-<game>/USRDIR is what ships
+# inside the .pkg: Doom carries the redistributable shareware WAD,
+# Heretic and Hexen ship empty since their IWADs are commercial and the
+# user FTPs them in.
+PKGFILES  := $(CRISPY_ROOT)pkgfiles-$(PS3_GAME)
+ICON0     := $(CRISPY_ROOT)ps3/icons/ICON0_$(PS3_GAME).PNG
+
+all: $(TARGET).pkg
+
+$(TARGET).elf:
+	@true
+
+clean:
+	rm -f $(TARGET).self $(TARGET).pkg $(TARGET).gnpdrm.pkg
+	rm -rf build

@@ -20,14 +20,13 @@
 
 #include "config.h"
 
-#include "SDL.h"
-
 #include "pcsound.h"
 #include "pcsound_internal.h"
 
 
 #ifndef DISABLE_SDL2MIXER
 
+#include "SDL.h"
 #include "SDL_mixer.h"
 
 

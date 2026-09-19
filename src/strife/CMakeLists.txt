@@ -74,7 +74,14 @@ set(STRIFE_SOURCES
 add_library(strife STATIC ${STRIFE_SOURCES})
 
 target_include_directories(strife PRIVATE "../" "../../win32/" "${CMAKE_CURRENT_BINARY_DIR}/../../")
-if (DEFINED EMSCRIPTEN)
+# [PS3] No SDL and no textscreen here: the VGA-text startup screen that
+# pulled textscreen in is stubbed out of d_main.c, and the platform
+# layer (i_ps3*.c) replaces everything SDL provided. The executable
+# target links the real list from src/CMakeLists.txt.
+if(PS3_BUILD)
+    set(SDL_FLAGS "")
+    set(SDL_LINK_LIBS "")
+elseif (DEFINED EMSCRIPTEN)
     set(SDL_FLAGS "-s USE_SDL=2")
     if(ENABLE_SDL2_MIXER)
         set(SDL_FLAGS "${SDL_FLAGS} -s USE_SDL_MIXER=2")
@@ -91,6 +98,10 @@ else()
         list(APPEND SDL_LINK_LIBS SDL2_net::SDL2_net)
     endif()
 endif()
-target_link_libraries(strife textscreen ${SDL_LINK_LIBS})
+if(PS3_BUILD)
+    target_link_libraries(strife ${SDL_LINK_LIBS})
+else()
+    target_link_libraries(strife textscreen ${SDL_LINK_LIBS})
+endif()
 set_target_properties(strife PROPERTIES COMPILE_FLAGS "${SDL_FLAGS}")
 set_target_properties(strife PROPERTIES LINK_FLAGS "${SDL_FLAGS}")

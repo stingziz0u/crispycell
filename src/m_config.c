@@ -26,7 +26,23 @@
 #include <assert.h>
 #include <locale.h>
 
+#ifdef PS3_BUILD
+extern void PS3_Log(const char *fmt, ...);
+
+static char *SDL_GetPrefPath(const char *org, const char *app)
+{
+    // Fixed path, same scheme as ECWolf's PS3_GAME_PATH -- no OS-level
+    // per-app pref directory API on PS3, so just point at this game's
+    // own USRDIR. malloc'd (not a literal) because every caller expects
+    // to own and free the returned pointer, same as the real SDL API.
+    (void)org;
+    (void)app;
+    return strdup(PS3_USRDIR "/");
+}
+#define SDL_free free
+#else
 #include "SDL_filesystem.h"
+#endif
 
 #include "config.h"
 
@@ -3346,18 +3362,32 @@ char *M_GetSaveGameDir(const char *iwadname)
         savegamedir = M_StringDuplicate(configdir);
     }
 #endif
+#ifdef PS3_BUILD
+    // [PS3] Upstream reads configdir == exedir as "portable mode, save
+    // next to the executable" and leaves savegamedir empty, so
+    // P_SaveGameFile returns a bare "doomsav0.dsg" relative to a cwd
+    // that does not exist on this platform. On PS3 those two paths are
+    // always equal -- the EBOOT lives in the very USRDIR the config
+    // shim returns -- so that branch has to be skipped entirely and the
+    // savegames/<iwad>/ tree built explicitly, same as every other
+    // platform does.
+#else
     // If not "doing" a configuration directory (Windows), don't "do"
     // a savegame directory, either.
     else if (!strcmp(configdir, exedir))
     {
 	savegamedir = M_StringDuplicate("");
     }
+#endif
     else
     {
         // ~/.local/share/chocolate-doom/savegames
 
         topdir = M_StringJoin(configdir, "savegames", NULL);
         M_MakeDirectory(topdir);
+#ifdef PS3_BUILD
+        PS3_Log("M_GetSaveGameDir: topdir='%s'", topdir);
+#endif
 
         // eg. ~/.local/share/chocolate-doom/savegames/doom2.wad/
 
@@ -3365,6 +3395,9 @@ char *M_GetSaveGameDir(const char *iwadname)
                                    DIR_SEPARATOR_S, NULL);
 
         M_MakeDirectory(savegamedir);
+#ifdef PS3_BUILD
+        PS3_Log("M_GetSaveGameDir: savegamedir='%s'", savegamedir);
+#endif
 
         free(topdir);
     }

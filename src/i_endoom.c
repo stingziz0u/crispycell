@@ -22,7 +22,9 @@
 #include "doomtype.h"
 #include "i_video.h"
 
+#ifndef PS3_BUILD
 #include "txt_main.h"
+#endif
 
 #define ENDOOM_W 80
 #define ENDOOM_H 25
@@ -30,6 +32,18 @@
 // 
 // Displays the text mode ending screen after the game quits
 //
+
+#ifdef PS3_BUILD
+
+// No text-mode console to render ENDOOM into on PS3 -- and blocking on
+// a keypress here would hang the game on quit, since there is no
+// keyboard input in this mode. No-op.
+
+void I_Endoom(byte *endoom_data)
+{
+}
+
+#else
 
 void I_Endoom(byte *endoom_data)
 {
@@ -76,4 +90,6 @@ void I_Endoom(byte *endoom_data)
 
     TXT_Shutdown();
 }
+
+#endif // PS3_BUILD
 
