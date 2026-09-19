@@ -28,7 +28,9 @@ Doom (id Software, 1997) -> Chocolate Doom -> Crispy Doom -> CrispyCell (this pr
 - **WAD launcher:** scans for what you installed and lists each playable
   thing as its own entry — base games and add-ons alike — pairing every
   add-on with the base game it needs. Skipped entirely when there is only
-  one thing to play.
+  one thing to play. The WADs listed under Installation are the ones I
+  tested personally; anything else the engine supports should work too,
+  as long as it carries `ExMy` or `MAPxx` maps (see Known limitations).
 - **Gamma correction from the menu**, since F11 is not reachable without a
   keyboard.
 - Clean exit to the XMB from the in-game Quit option or the PS button.
