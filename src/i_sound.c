@@ -28,6 +28,7 @@
 #include "m_config.h"
 
 extern void PS3_Log(const char *fmt, ...);
+extern void PS3_LogV(const char *fmt, ...);
 
 #ifndef DISABLE_SDL2MIXER
 
@@ -437,7 +438,7 @@ void I_ShutdownMusic(void)
 
 void I_SetMusicVolume(int volume)
 {
-    PS3_Log("I_SetMusicVolume: %d", volume);
+    PS3_LogV("I_SetMusicVolume: %d", volume);
     if (music_module != NULL)
     {
         music_module->SetMusicVolume(volume);
@@ -515,7 +516,7 @@ void *I_RegisterSong(void *data, int len)
     }
 
     // No substitution for this track, so use the main module.
-    PS3_Log("I_RegisterSong: len=%d mid=%d mus=%d modulo=%s",
+    PS3_LogV("I_RegisterSong: len=%d mid=%d mus=%d modulo=%s",
             len, IsMid(data, len), IsMus(data, len),
             music_module ? "OPL" : "NULL");
     active_music_module = music_module;

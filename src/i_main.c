@@ -69,6 +69,7 @@ static int g_argc;
 static char **g_argv;
 
 extern void PS3_Log(const char *fmt, ...);
+extern void PS3_LogV(const char *fmt, ...);
 extern boolean PS3_Launcher_SelectIWAD(char *out_path, size_t out_size);
 extern int PS3_Launcher_GetAddons(const char **paths, int max);
 
@@ -92,7 +93,7 @@ static void PS3_SysutilCallback(u64 status, u64 param, void *userdata)
         I_Quit();
         break;
     default:
-        PS3_Log("PS3_SysutilCallback: status=0x%llx (not EXIT_GAME)",
+        PS3_LogV("PS3_SysutilCallback: status=0x%llx (not EXIT_GAME)",
                 (unsigned long long) status);
         break;
     }

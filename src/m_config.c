@@ -28,6 +28,7 @@
 
 #ifdef PS3_BUILD
 extern void PS3_Log(const char *fmt, ...);
+extern void PS3_LogV(const char *fmt, ...);
 
 static char *SDL_GetPrefPath(const char *org, const char *app)
 {
@@ -3386,7 +3387,7 @@ char *M_GetSaveGameDir(const char *iwadname)
         topdir = M_StringJoin(configdir, "savegames", NULL);
         M_MakeDirectory(topdir);
 #ifdef PS3_BUILD
-        PS3_Log("M_GetSaveGameDir: topdir='%s'", topdir);
+        PS3_LogV("M_GetSaveGameDir: topdir='%s'", topdir);
 #endif
 
         // eg. ~/.local/share/chocolate-doom/savegames/doom2.wad/
@@ -3396,7 +3397,7 @@ char *M_GetSaveGameDir(const char *iwadname)
 
         M_MakeDirectory(savegamedir);
 #ifdef PS3_BUILD
-        PS3_Log("M_GetSaveGameDir: savegamedir='%s'", savegamedir);
+        PS3_LogV("M_GetSaveGameDir: savegamedir='%s'", savegamedir);
 #endif
 
         free(topdir);

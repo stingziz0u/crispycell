@@ -96,6 +96,7 @@ PS3_RSX_WaitForFreeBuffer(void)
 }
 
 extern void PS3_Log(const char *fmt, ...);
+extern void PS3_LogV(const char *fmt, ...);
 
 void
 PS3_RSX_Init(void)
@@ -568,7 +569,7 @@ void I_ReInitGraphics(int reinit)
 
         V_RestoreBuffer();
 
-        PS3_Log("I_ReInitGraphics: now %dx%d, widescreendelta=%d",
+        PS3_LogV("I_ReInitGraphics: now %dx%d, widescreendelta=%d",
                 SCREENWIDTH, SCREENHEIGHT, WIDESCREENDELTA);
     }
 }

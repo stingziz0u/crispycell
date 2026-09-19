@@ -53,6 +53,7 @@
 #include "i_video.h"
 
 extern void PS3_Log(const char *fmt, ...);
+extern void PS3_LogV(const char *fmt, ...);
 extern void PS3_RSX_Init(void);
 extern void PS3_RSX_Present(const u32 *src, int src_w, int src_h);
 
@@ -598,7 +599,7 @@ static void ScanDir(const char *dir)
         M_StringCopy(w->file, e->d_name, sizeof(w->file));
         M_StringCopy(w->label, LabelFor(e->d_name), sizeof(w->label));
 
-        PS3_Log("Launcher: %s '%s' family=%d (%s)",
+        PS3_LogV("Launcher: %s '%s' family=%d (%s)",
                 w->is_iwad ? "IWAD" : "PWAD", e->d_name,
                 (int) w->family, w->label);
 
@@ -744,7 +745,7 @@ static void BuildEntries(void)
 
             if (req == NULL)
             {
-                PS3_Log("Launcher: skipping '%s', needs %s",
+                PS3_LogV("Launcher: skipping '%s', needs %s",
                         found[i].file, required);
                 continue;
             }
@@ -765,7 +766,7 @@ static void BuildEntries(void)
 
                 if (base == NULL)
                 {
-                    PS3_Log("Launcher: skipping '%s', no game to run %s on",
+                    PS3_LogV("Launcher: skipping '%s', no game to run %s on",
                             found[i].file, required);
                     continue;
                 }
@@ -777,7 +778,7 @@ static void BuildEntries(void)
 
             if (base == NULL)
             {
-                PS3_Log("Launcher: skipping '%s', no compatible game installed",
+                PS3_LogV("Launcher: skipping '%s', no compatible game installed",
                         found[i].file);
                 continue;
             }
@@ -807,12 +808,12 @@ static void BuildEntries(void)
             {
                 M_StringCopy(g->files[g->num_files++], music->path,
                              sizeof(g->files[0]));
-                PS3_Log("Launcher: '%s' also loads '%s'",
+                PS3_LogV("Launcher: '%s' also loads '%s'",
                         found[i].file, companion);
             }
         }
 
-        PS3_Log("Launcher: entry '%s' = %s + %s",
+        PS3_LogV("Launcher: entry '%s' = %s + %s",
                 g->label, base->file, found[i].file);
     }
 }

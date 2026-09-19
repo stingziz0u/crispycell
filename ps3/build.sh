@@ -57,8 +57,8 @@ rm -rf build "crispy-$GAME.self" "crispy-$GAME.pkg" \
        "crispy-$GAME.gnpdrm.pkg" "crispy-$GAME.fake.self"
 cp "crispy-$GAME" "crispy-$GAME.elf"
 make -f ../../Makefile.crispypkg 2>&1 | tail -2
-cp "crispy-$GAME.gnpdrm.pkg" "$ROOT/Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.0.pkg"
+cp "crispy-$GAME.gnpdrm.pkg" "$ROOT/Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.1.pkg"
 
 echo
-echo "=== LISTO: Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.0.pkg ($APPID) ==="
-ls -la "$ROOT/Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.0.pkg"
+echo "=== LISTO: Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.1.pkg ($APPID) ==="
+ls -la "$ROOT/Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.1.pkg"

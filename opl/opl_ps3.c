@@ -55,6 +55,7 @@ static int16_t *mix_buffer = NULL;
 static int register_num = 0;
 
 extern void PS3_Log(const char *fmt, ...);
+extern void PS3_LogV(const char *fmt, ...);
 static volatile unsigned long long ps3_blocks_written = 0;
 static volatile int ps3_peak = 0;
 
@@ -147,7 +148,7 @@ OPL_PS3_AudioThread(void *arg)
         last_filled_buf = filling;
         ps3_blocks_written++;
         if ((ps3_blocks_written % 188) == 0) {
-            PS3_Log("OPL_PS3: blocks=%llu peak=%d regw=%llu cb=%llu zerons=%llu",
+            PS3_LogV("OPL_PS3: blocks=%llu peak=%d regw=%llu cb=%llu zerons=%llu",
                     ps3_blocks_written, ps3_peak, ps3_regwrites,
                     ps3_callbacks, ps3_zero_ns);
             ps3_peak = 0;
@@ -207,6 +208,7 @@ OPL_PS3_AudioThread(void *arg)
 }
 
 extern void PS3_Log(const char *fmt, ...);
+extern void PS3_LogV(const char *fmt, ...);
 
 static int OPL_PS3_Init(unsigned int port_base)
 {

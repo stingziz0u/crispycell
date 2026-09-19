@@ -48,6 +48,28 @@ void PS3_Log(const char *fmt, ...)
     va_end(argptr);
 }
 
+// [PS3] Verbose diagnostics. Everything routed through here was essential
+// while bringing the port up and is pure noise in a release build -- the
+// audio block counter alone writes a line per second, forever, and the log
+// file has no size cap. What stays on PS3_Log is the boot sequence, the
+// audio/video init results, which WAD the launcher chose, and I_Error.
+// Rebuild with -DPS3_VERBOSE_LOG to get the rest back.
+void PS3_LogV(const char *fmt, ...)
+{
+#ifdef PS3_VERBOSE_LOG
+    va_list argptr;
+    va_start(argptr, fmt);
+    PS3_LogTo(PS3_LOG_PATH_A, fmt, argptr);
+    va_end(argptr);
+
+    va_start(argptr, fmt);
+    PS3_LogTo(PS3_LOG_PATH_B, fmt, argptr);
+    va_end(argptr);
+#else
+    (void) fmt;
+#endif
+}
+
 // Runs as part of C runtime static initialization, before main() gets
 // control at all -- the earliest hook pure C code can register without
 // touching crt0/the linker script directly. If this line never shows
