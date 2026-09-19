@@ -30,7 +30,7 @@ Doom (id Software, 1997) -> Chocolate Doom -> Crispy Doom -> CrispyCell (this pr
   add-on with the base game it needs. Skipped entirely when there is only
   one thing to play.
 - **Gamma correction from the menu**, since F11 is not reachable without a
-  keyboard and Hexen in particular is dark on a modern panel.
+  keyboard.
 - Clean exit to the XMB from the in-game Quit option or the PS button.
 
 ## Requirements
@@ -224,8 +224,7 @@ back (Cross and Circle), and the stick axes.
   because the launcher makes switching easy.
 - **No Strife.** The engine compiles and boots, but Strife asks you to type
   a character name before the first game and its NPC dialogue is answered
-  with number keys. Without a keyboard there is no way past that. An
-  on-screen keyboard would be needed.
+  with number keys. Without a keyboard there is no way past that.
 - **No multiplayer.** The networking layer is a stub.
 - **No mouse or keyboard**, even if one is plugged in.
 - **Errors are logged, not shown.** A fatal error writes to
