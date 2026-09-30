@@ -8,7 +8,12 @@
 // SoundFont player, and played by whichever synth is chosen.
 //
 // Crispness -> Audible -> Music: "OPL" (the original, default) or any
-// .sf2 in USRDIR/soundfonts/ (the PKG ships GeneralUser GS there).
+// .sf2 in /dev_hdd0/data/crispycell/, one folder for the four games. A
+// package cannot install anything outside its own game folder, so each
+// PKG carries GeneralUser GS in USRDIR/soundfonts/ and the first boot
+// moves it there (MoveBundledSoundFonts): whichever of the four is
+// installed first puts it in place, the others overwrite it with the
+// same file, and no game keeps a 30 MB copy of its own.
 // The choice is saved as ps3_music_sf2 (the file name, empty for OPL).
 // Changing it restarts the current song with the new synth.
 //
@@ -30,6 +35,7 @@
 #include <string.h>
 #include <strings.h>
 #include <dirent.h>
+#include <sys/stat.h>
 
 #include <sys/mutex.h>
 
@@ -48,7 +54,9 @@
 
 extern void PS3_Log(const char *fmt, ...);
 
-#define SF2_DIR     PS3_USRDIR "/soundfonts"
+#define DATA_DIR    "/dev_hdd0/data"
+#define SF2_DIR     DATA_DIR "/crispycell"          // shared by the 4 games
+#define SF2_PKG_DIR PS3_USRDIR "/soundfonts"        // where the PKG puts it
 #define SF2_RATE    48000       // the audio port's (opl_ps3.c)
 #define SF2_VOICES  64
 #define SF2_MAX     16          // SoundFonts offered in the menu
@@ -119,14 +127,110 @@ static int CompareNames(const void *a, const void *b)
     return strcasecmp((const char *) a, (const char *) b);
 }
 
-static void ScanSoundFonts(void)
+// The copy when rename cannot do it (it should: both folders are on
+// dev_hdd0). 1 MB at a time.
+static boolean CopyFile(const char *from, const char *to)
+{
+    FILE *in, *out;
+    char *buf;
+    size_t n;
+    boolean ok = true;
+
+    buf = malloc(1024 * 1024);
+    in = fopen(from, "rb");
+    out = fopen(to, "wb");
+
+    if (buf == NULL || in == NULL || out == NULL)
+    {
+        ok = false;
+    }
+    else
+    {
+        while ((n = fread(buf, 1, 1024 * 1024, in)) > 0)
+        {
+            if (fwrite(buf, 1, n, out) != n)
+            {
+                ok = false;
+                break;
+            }
+        }
+    }
+
+    if (in != NULL)
+    {
+        fclose(in);
+    }
+    if (out != NULL && fclose(out) != 0)
+    {
+        ok = false;
+    }
+    free(buf);
+
+    if (!ok)
+    {
+        remove(to);
+    }
+
+    return ok;
+}
+
+// What the PKG left in USRDIR/soundfonts/ goes to the shared folder,
+// replacing a file of the same name (the same SoundFont from another of
+// the four packages, or an older copy).
+static void MoveBundledSoundFonts(void)
 {
     DIR *d;
     struct dirent *e;
 
-    sf2_count = 0;
+    mkdir(DATA_DIR, 0777);
+    mkdir(SF2_DIR, 0777);
 
-    d = opendir(SF2_DIR);
+    d = opendir(SF2_PKG_DIR);
+    if (d == NULL)
+    {
+        return;
+    }
+
+    while ((e = readdir(d)) != NULL)
+    {
+        char from[320], to[320];
+
+        if (!IsSoundFont(e->d_name))
+        {
+            continue;
+        }
+
+        M_snprintf(from, sizeof(from), "%s/%s", SF2_PKG_DIR, e->d_name);
+        M_snprintf(to, sizeof(to), "%s/%s", SF2_DIR, e->d_name);
+
+        remove(to);
+
+        if (rename(from, to) == 0)
+        {
+            PS3_Log("[music] moved %s to %s", e->d_name, SF2_DIR);
+        }
+        else if (CopyFile(from, to))
+        {
+            remove(from);
+            PS3_Log("[music] copied %s to %s", e->d_name, SF2_DIR);
+        }
+        else
+        {
+            // stays in USRDIR/soundfonts/, which is still searched
+            PS3_Log("[music] could not move %s to %s", e->d_name, SF2_DIR);
+        }
+    }
+
+    closedir(d);
+}
+
+static void ScanDir(const char *dir)
+{
+    DIR *d;
+    struct dirent *e;
+    int i;
+
+    d = opendir(dir);
     if (d == NULL)
     {
         return;
@@ -134,13 +238,38 @@ static void ScanSoundFonts(void)
 
     while ((e = readdir(d)) != NULL && sf2_count < SF2_MAX)
     {
-        if (IsSoundFont(e->d_name) && strlen(e->d_name) < SF2_NAMELEN)
+        boolean dup = false;
+
+        if (!IsSoundFont(e->d_name) || strlen(e->d_name) >= SF2_NAMELEN)
+        {
+            continue;
+        }
+
+        for (i = 0; i < sf2_count; i++)
+        {
+            if (strcasecmp(sf2_names[i], e->d_name) == 0)
+            {
+                dup = true;
+            }
+        }
+
+        if (!dup)
         {
             M_StringCopy(sf2_names[sf2_count++], e->d_name, SF2_NAMELEN);
         }
     }
 
     closedir(d);
+}
+
+// The shared folder, and USRDIR/soundfonts/ for anything that could not
+// be moved out of it.
+static void ScanSoundFonts(void)
+{
+    sf2_count = 0;
+
+    ScanDir(SF2_DIR);
+    ScanDir(SF2_PKG_DIR);
 
     qsort(sf2_names, sf2_count, SF2_NAMELEN, CompareNames);
 }
@@ -152,6 +281,10 @@ static tsf *LoadSoundFont(const char *name)
     int ch;
 
     M_snprintf(path, sizeof(path), "%s/%s", SF2_DIR, name);
+    if (!M_FileExists(path))
+    {
+        M_snprintf(path, sizeof(path), "%s/%s", SF2_PKG_DIR, name);
+    }
     PS3_Log("[music] loading %s", path);
 
     f = tsf_load_filename(path);
@@ -394,6 +527,7 @@ static boolean PS3Music_Init(void)
     sysMutexAttrInitialize(attr);
     sf2_mutex_ready = (sysMutexCreate(&sf2_mutex, &attr) == 0);
 
+    MoveBundledSoundFonts();
     ScanSoundFonts();
     PS3_Log("[music] %d SoundFont(s) in %s, chosen: %s", sf2_count, SF2_DIR,
             ps3_music_sf2[0] ? ps3_music_sf2 : "OPL");

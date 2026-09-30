@@ -362,9 +362,12 @@ Options -> Crispness -> page 2 -> Audible -> **Music** (left / right)
 switches between:
 
 - **OPL** — the original FM synthesis, as on a Sound Blaster. The default.
-- **A SoundFont** — every `.sf2` in `USRDIR/soundfonts/`, by file name. The
-  packages ship `GeneralUser-GS.sf2` there; FTP any other General MIDI
-  SoundFont into the same folder to add it to the list.
+- **A SoundFont** — every `.sf2` in `/dev_hdd0/data/crispycell/`, by file
+  name. That folder is shared by the four games. Every package ships
+  `GeneralUser-GS.sf2` and moves it there the first time it starts
+  (whichever you install first puts it in place; the others just replace
+  it with the same file). FTP any other General MIDI SoundFont into that
+  folder to add it to the list of all four games.
 
 The change applies at once and restarts the current song. Loading a
 SoundFont takes a few seconds (a 30 MB one, about 2-3 s), during which the
@@ -405,6 +408,10 @@ and view size inside the game's own picture.
   `crispy_log.old.txt`, so a crash can still be read after relaunching.
 - **The SoundFont synth has no reverb or chorus**, so some tracks sound
   drier than on real General MIDI hardware.
+- **Each SoundFont gives the music its own character.** GeneralUser GS's
+  strings, for example, fade out slowly (about 1.5 s), so fast string
+  notes blend into chords: E1M5 "Suspense" sounds much denser than on
+  the OPL. Another `.sf2` can sound closer to what you remember.
 - **Add-ons that change only textures or sounds are not listed** when
   dropped loose in `USRDIR/`: the launcher places an add-on by the `ExMy`
   or `MAPxx` maps inside it. Put them in a folder under `mods/` instead,
@@ -448,7 +455,8 @@ The `ps3/` directory holds everything specific to this port's build:
   `./ps3/build.sh doom`, `heretic`, `hexen` or `strife`. Rewrites
   `appid.mk`, reconfigures, clears the object tree when the engine changes,
   builds, and packages `Crispy<Game>-1.2.pkg` in the project root. Every
-  `.sf2` in `ps3/soundfonts/` goes into the package's `USRDIR/soundfonts/`.
+  `.sf2` in `ps3/soundfonts/` goes into the package's `USRDIR/soundfonts/`,
+  which the game moves to `/dev_hdd0/data/crispycell/` on its first boot.
 - **`icons/`** — the `ICON0.PNG` for each engine's XMB entry (320x176).
 
 `Makefile.crispypkg` in the project root packages an already-built `.elf`
