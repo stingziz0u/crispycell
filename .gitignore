@@ -72,6 +72,5 @@ compile_commands.json
 *.elf
 /ps3/appid.mk
 
-# SoundFonts (GeneralUser GS is copied here by hand, see the README)
-/ps3/soundfonts/*.sf2
-/pkgfiles-*/USRDIR/soundfonts/
+# SoundFonts are never part of the repository or the packages
+*.sf2

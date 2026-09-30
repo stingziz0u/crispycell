@@ -28,9 +28,9 @@ Doom (id Software, 1997) -> Chocolate Doom -> Crispy Doom -> CrispyCell (this pr
   from-scratch SFX mixer, sharing a single audio port. Strife's spoken
   dialogue plays in full.
 - **SoundFont music:** the music can also play in General MIDI through a
-  SoundFont (`.sf2`). The packages ship with
-  [GeneralUser GS](https://www.schristiancollins.com/generaluser.php), and
-  any other `.sf2` can be added. See [Music](#music).
+  SoundFont (`.sf2`) you copy to the console, such as
+  [GeneralUser GS](https://www.schristiancollins.com/generaluser.php).
+  See [Music](#music).
 - **Input:** DualShock 3, both sticks, every action reachable from the
   pad and rebindable in the configuration files. Adjustable
   turn/move/look sensitivity from the in-game menu.
@@ -363,11 +363,14 @@ switches between:
 
 - **OPL** — the original FM synthesis, as on a Sound Blaster. The default.
 - **A SoundFont** — every `.sf2` in `/dev_hdd0/data/crispycell/`, by file
-  name. That folder is shared by the four games. Every package ships
-  `GeneralUser-GS.sf2` and moves it there the first time it starts
-  (whichever you install first puts it in place; the others just replace
-  it with the same file). FTP any other General MIDI SoundFont into that
-  folder to add it to the list of all four games.
+  name. The packages do not include one: create that folder over FTP and
+  put any General MIDI SoundFont in it. It is shared by the four games,
+  so one copy serves all of them. Tested with
+  [GeneralUser GS](https://www.schristiancollins.com/generaluser.php)
+  (`GeneralUser-GS.sf2`, about 30 MB, from its
+  [GitHub releases](https://github.com/mrbumpy409/GeneralUser-GS)).
+
+With no `.sf2` there, the option stays on OPL.
 
 The change applies at once and restarts the current song. Loading a
 SoundFont takes a few seconds (a 30 MB one, about 2-3 s), during which the
@@ -454,9 +457,7 @@ The `ps3/` directory holds everything specific to this port's build:
 - **`build.sh`** — builds and packages one engine end to end:
   `./ps3/build.sh doom`, `heretic`, `hexen` or `strife`. Rewrites
   `appid.mk`, reconfigures, clears the object tree when the engine changes,
-  builds, and packages `Crispy<Game>-1.2.pkg` in the project root. Every
-  `.sf2` in `ps3/soundfonts/` goes into the package's `USRDIR/soundfonts/`,
-  which the game moves to `/dev_hdd0/data/crispycell/` on its first boot.
+  builds, and packages `Crispy<Game>-1.2.pkg` in the project root.
 - **`icons/`** — the `ICON0.PNG` for each engine's XMB entry (320x176).
 
 `Makefile.crispypkg` in the project root packages an already-built `.elf`
@@ -469,15 +470,6 @@ that cannot start the NPDRM `EBOOT.BIN`.
 `pkgfiles-<game>/USRDIR/` is what ships inside each package. Doom's holds
 the shareware WAD; Heretic's, Hexen's and Strife's are empty, since their
 IWADs are commercial.
-
-To ship GeneralUser GS inside the packages, as the releases do, fetch it
-once into `ps3/soundfonts/` (it is not part of this repository):
-
-```bash
-git clone --depth 1 https://github.com/mrbumpy409/GeneralUser-GS /tmp/GeneralUser-GS
-mkdir -p ps3/soundfonts
-cp /tmp/GeneralUser-GS/GeneralUser-GS.sf2 ps3/soundfonts/
-```
 
 ```bash
 mkdir build-ps3 && cd build-ps3
@@ -515,13 +507,14 @@ voice started) are compiled out of release builds; define
   Schelling — the SoundFont synthesizer and MIDI loader (`src/tsf.h`,
   `src/tml.h`, MIT; `tsf.h` with a big-endian fix for the PS3).
 - [GeneralUser GS](https://www.schristiancollins.com/generaluser.php) by
-  S. Christian Collins — the SoundFont shipped in the packages.
+  S. Christian Collins — the SoundFont the music was tested with (not
+  included).
 
 ## License
 
 GPLv2, inherited from Crispy Doom. See [COPYING.md](COPYING.md).
-TinySoundFont (`src/tsf.h`, `src/tml.h`) is MIT. GeneralUser GS is not part
-of this repository; its own license allows shipping it inside the packages.
+TinySoundFont (`src/tsf.h`, `src/tml.h`) is MIT. No SoundFont is included
+in this repository or in the packages.
 
 No commercial game data is included in this repository. You need your own
 legally-owned copy of the games.

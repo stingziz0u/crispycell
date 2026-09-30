@@ -52,16 +52,9 @@ fi
 cmake .. -DCMAKE_TOOLCHAIN_FILE=../ps3/crispy-ps3-toolchain.cmake -DPS3_BUILD=ON 2>&1 | grep -i "ps3 appid"
 make "crispy-$GAME" 2>&1 | tail -3
 
-# SoundFonts for the music (1.2): every .sf2 in ps3/soundfonts/ ships in
-# USRDIR/soundfonts/ -- GeneralUser GS, see the README. The game moves
-# them to /dev_hdd0/data/crispycell/ on its first boot (i_ps3music.c):
-# a PKG cannot install outside its own game folder.
-SF_DST="$ROOT/pkgfiles-$GAME/USRDIR/soundfonts"
-rm -rf "$SF_DST"
-mkdir -p "$SF_DST"
-for sf in "$ROOT"/ps3/soundfonts/*.sf2; do
-    [ -f "$sf" ] && cp "$sf" "$SF_DST/" && echo "soundfont: $(basename "$sf")"
-done
+# Test builds of 1.2 packed a SoundFont from here; the packages carry
+# none now (the player puts it in /dev_hdd0/data/crispycell/).
+rm -rf "$ROOT/pkgfiles-$GAME/USRDIR/soundfonts"
 
 cd src
 rm -rf build "crispy-$GAME.self" "crispy-$GAME.pkg" \
