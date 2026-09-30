@@ -52,13 +52,23 @@ fi
 cmake .. -DCMAKE_TOOLCHAIN_FILE=../ps3/crispy-ps3-toolchain.cmake -DPS3_BUILD=ON 2>&1 | grep -i "ps3 appid"
 make "crispy-$GAME" 2>&1 | tail -3
 
+# SoundFonts for the music (1.2): every .sf2 in ps3/soundfonts/ ships in
+# USRDIR/soundfonts/ -- GeneralUser GS, see the README. The folder is
+# always in the PKG, empty or not, so players can drop their own in.
+SF_DST="$ROOT/pkgfiles-$GAME/USRDIR/soundfonts"
+rm -rf "$SF_DST"
+mkdir -p "$SF_DST"
+for sf in "$ROOT"/ps3/soundfonts/*.sf2; do
+    [ -f "$sf" ] && cp "$sf" "$SF_DST/" && echo "soundfont: $(basename "$sf")"
+done
+
 cd src
 rm -rf build "crispy-$GAME.self" "crispy-$GAME.pkg" \
        "crispy-$GAME.gnpdrm.pkg" "crispy-$GAME.fake.self"
 cp "crispy-$GAME" "crispy-$GAME.elf"
 make -f ../../Makefile.crispypkg 2>&1 | tail -2
-cp "crispy-$GAME.gnpdrm.pkg" "$ROOT/Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.1.pkg"
+cp "crispy-$GAME.gnpdrm.pkg" "$ROOT/Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.2.pkg"
 
 echo
-echo "=== LISTO: Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.1.pkg ($APPID) ==="
-ls -la "$ROOT/Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.1.pkg"
+echo "=== LISTO: Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.2.pkg ($APPID) ==="
+ls -la "$ROOT/Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.2.pkg"

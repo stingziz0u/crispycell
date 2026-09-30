@@ -27,6 +27,10 @@ Doom (id Software, 1997) -> Chocolate Doom -> Crispy Doom -> CrispyCell (this pr
 - **Audio:** native 48000 Hz through libaudio. OPL3 music emulation and a
   from-scratch SFX mixer, sharing a single audio port. Strife's spoken
   dialogue plays in full.
+- **SoundFont music:** the music can also play in General MIDI through a
+  SoundFont (`.sf2`). The packages ship with
+  [GeneralUser GS](https://www.schristiancollins.com/generaluser.php), and
+  any other `.sf2` can be added. See [Music](#music).
 - **Input:** DualShock 3, both sticks, every action reachable from the
   pad and rebindable in the configuration files. Adjustable
   turn/move/look sensitivity from the in-game menu.
@@ -34,7 +38,7 @@ Doom (id Software, 1997) -> Chocolate Doom -> Crispy Doom -> CrispyCell (this pr
   from level to level.
 - **WAD launcher:** scans for what you installed and lists each playable
   thing as its own entry — base games and add-ons alike — pairing every
-  add-on with the base game it needs. Skipped entirely when there is only
+  add-on with the base game it needs. Skipped at boot when there is only
   one thing to play. The WADs listed under Installation are the ones I
   tested personally; anything else the engine supports should work too.
 - **Mods:** multi-file mods and total conversions (several WADs plus
@@ -44,7 +48,10 @@ Doom (id Software, 1997) -> Chocolate Doom -> Crispy Doom -> CrispyCell (this pr
   the PS3's own on-screen keyboard; dialogue is answered with the pad.
 - **Gamma correction from the menu**, since F11 is not reachable without a
   keyboard.
-- Clean exit to the XMB from the in-game Quit option or the PS button.
+- **Quit Game goes back to the launcher**, to pick another game or add-on
+  (finish SIGIL, go straight on to SIGIL II) without going through the
+  XMB. From the launcher, Circle exits to the XMB. The PS button's Quit
+  Game still exits straight to the XMB.
 
 ## Requirements
 
@@ -63,10 +70,10 @@ coexist on the XMB and keep their own savegames and configuration.
 
 | Package | APPID | Installs to |
 |---|---|---|
-| `CrispyDoom-1.1.pkg` | `CRISPDOOM` | `/dev_hdd0/game/CRISPDOOM/USRDIR/` |
-| `CrispyHeretic-1.1.pkg` | `CRISPHERE` | `/dev_hdd0/game/CRISPHERE/USRDIR/` |
-| `CrispyHexen-1.1.pkg` | `CRISPHEX1` | `/dev_hdd0/game/CRISPHEX1/USRDIR/` |
-| `CrispyStrife-1.1.pkg` | `CRISPSTRF` | `/dev_hdd0/game/CRISPSTRF/USRDIR/` |
+| `CrispyDoom-1.2.pkg` | `CRISPDOOM` | `/dev_hdd0/game/CRISPDOOM/USRDIR/` |
+| `CrispyHeretic-1.2.pkg` | `CRISPHERE` | `/dev_hdd0/game/CRISPHERE/USRDIR/` |
+| `CrispyHexen-1.2.pkg` | `CRISPHEX1` | `/dev_hdd0/game/CRISPHEX1/USRDIR/` |
+| `CrispyStrife-1.2.pkg` | `CRISPSTRF` | `/dev_hdd0/game/CRISPSTRF/USRDIR/` |
 
 Install from the XMB, then FTP your WADs into that folder. The launcher
 picks them up on the next boot — no configuration file to edit.
@@ -126,8 +133,12 @@ Into `CRISPHEX1/USRDIR/`:
 
 ```
 HEXEN.WAD         Hexen: Beyond Heretic
-HEXDD.WAD         Deathkings of the Dark Citadel   (needs HEXEN.WAD)
+HEXDD.WAD         Deathkings of the Dark Citadel   (optional)
 ```
+
+Deathkings is not a separate entry in the launcher: with `HEXDD.WAD` next
+to `HEXEN.WAD`, the game loads it by itself and **New Game** asks which one
+to play, Hexen or Deathkings of the Dark Citadel.
 
 ### Strife
 
@@ -345,6 +356,22 @@ Joystick Sensitivity: `joystick_turn_sensitivity`,
 Two things are not rebindable: menu confirm and back (Cross and Circle)
 and the stick axes.
 
+## Music
+
+Options -> Crispness -> page 2 -> Audible -> **Music** (left / right)
+switches between:
+
+- **OPL** — the original FM synthesis, as on a Sound Blaster. The default.
+- **A SoundFont** — every `.sf2` in `USRDIR/soundfonts/`, by file name. The
+  packages ship `GeneralUser-GS.sf2` there; FTP any other General MIDI
+  SoundFont into the same folder to add it to the list.
+
+The change applies at once and restarts the current song. Loading a
+SoundFont takes a few seconds (a 30 MB one, about 2-3 s), during which the
+game waits. The samples are kept in memory at about twice the file's size,
+so SoundFonts up to roughly 100 MB are a good fit. The choice is saved as
+`ps3_music_sf2` in the game's config file.
+
 ## TV Screen Fit
 
 - Doom and Strife: Options -> Crispness -> page 1 (Rendering).
@@ -376,6 +403,8 @@ and view size inside the game's own picture.
   That log is the first place to look when something does not work. It
   is started fresh on every boot; the previous session is kept as
   `crispy_log.old.txt`, so a crash can still be read after relaunching.
+- **The SoundFont synth has no reverb or chorus**, so some tracks sound
+  drier than on real General MIDI hardware.
 - **Add-ons that change only textures or sounds are not listed** when
   dropped loose in `USRDIR/`: the launcher places an add-on by the `ExMy`
   or `MAPxx` maps inside it. Put them in a folder under `mods/` instead,
@@ -418,7 +447,8 @@ The `ps3/` directory holds everything specific to this port's build:
 - **`build.sh`** — builds and packages one engine end to end:
   `./ps3/build.sh doom`, `heretic`, `hexen` or `strife`. Rewrites
   `appid.mk`, reconfigures, clears the object tree when the engine changes,
-  builds, and packages `Crispy<Game>-1.1.pkg` in the project root.
+  builds, and packages `Crispy<Game>-1.2.pkg` in the project root. Every
+  `.sf2` in `ps3/soundfonts/` goes into the package's `USRDIR/soundfonts/`.
 - **`icons/`** — the `ICON0.PNG` for each engine's XMB entry (320x176).
 
 `Makefile.crispypkg` in the project root packages an already-built `.elf`
@@ -428,6 +458,15 @@ not compile the engine.
 `pkgfiles-<game>/USRDIR/` is what ships inside each package. Doom's holds
 the shareware WAD; Heretic's, Hexen's and Strife's are empty, since their
 IWADs are commercial.
+
+To ship GeneralUser GS inside the packages, as the releases do, fetch it
+once into `ps3/soundfonts/` (it is not part of this repository):
+
+```bash
+git clone --depth 1 https://github.com/mrbumpy409/GeneralUser-GS /tmp/GeneralUser-GS
+mkdir -p ps3/soundfonts
+cp /tmp/GeneralUser-GS/GeneralUser-GS.sf2 ps3/soundfonts/
+```
 
 ```bash
 mkdir build-ps3 && cd build-ps3
@@ -441,7 +480,8 @@ per-engine differences behind `PS3_GAME_DOOM`, `PS3_GAME_HERETIC`,
 `PS3_GAME_HEXEN` and `PS3_GAME_STRIFE`. The new platform files are
 `src/i_ps3video.c`, `src/i_ps3sound.c`, `src/i_ps3joystick.c`,
 `src/i_ps3launcher.c`, `src/i_ps3stubs.c`, `src/i_ps3input.c` (which also
-holds the on-screen keyboard), `src/net_ps3.c` and `opl/opl_ps3.c`.
+holds the on-screen keyboard), `src/i_ps3music.c` (OPL or SoundFont music),
+`src/net_ps3.c` and `opl/opl_ps3.c`.
 
 Development diagnostics (audio block counters, launcher decisions, every
 voice started) are compiled out of release builds; define
@@ -460,10 +500,17 @@ voice started) are compiled out of release builds; define
 - [Apollo Save Tool](https://github.com/bucanero/apollo-ps3) by bucanero,
   whose use of the system on-screen keyboard was the reference for
   Strife's name entry.
+- [TinySoundFont](https://github.com/schellingb/TinySoundFont) by Bernhard
+  Schelling — the SoundFont synthesizer and MIDI loader (`src/tsf.h`,
+  `src/tml.h`, MIT; `tsf.h` with a big-endian fix for the PS3).
+- [GeneralUser GS](https://www.schristiancollins.com/generaluser.php) by
+  S. Christian Collins — the SoundFont shipped in the packages.
 
 ## License
 
 GPLv2, inherited from Crispy Doom. See [COPYING.md](COPYING.md).
+TinySoundFont (`src/tsf.h`, `src/tml.h`) is MIT. GeneralUser GS is not part
+of this repository; its own license allows shipping it inside the packages.
 
 No commercial game data is included in this repository. You need your own
 legally-owned copy of the games.

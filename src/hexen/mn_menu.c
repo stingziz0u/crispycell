@@ -33,6 +33,7 @@
 #include "p_local.h"
 #include "r_local.h"
 #include "s_sound.h"
+#include "i_sound.h" // [PS3] PS3_Music_*
 #include "v_video.h"
 #include "am_map.h"
 
@@ -158,6 +159,9 @@ static void CrispyVsync(int option);
 static void CrispyBrightmaps(int option);
 static void CrispySmoothLighting(int option);
 static void CrispySoundMono(int option);
+#ifdef PS3_BUILD
+static void PS3MusicSynth(int option);
+#endif
 static void CrispyTranslucency(int option);
 static void CrispySndChannels(int option);
 static void CrispyPlayerCoords(int options);
@@ -498,7 +502,11 @@ static Menu_t Crispness1Menu = {
 static MenuItem_t Crispness2Items[] = {
     {ITT_LRFUNC2, "MONO SFX:", CrispySoundMono, 0, MENU_NONE},
     {ITT_LRFUNC2, "SOUND CHANNELS:", CrispySndChannels, 0, MENU_NONE},
+#ifdef PS3_BUILD
+    {ITT_LRFUNC2, "MUSIC:", PS3MusicSynth, 0, MENU_NONE},
+#else
     {ITT_EMPTY, NULL, NULL, 0, MENU_NONE},
+#endif
     {ITT_EMPTY, NULL, NULL, 0, MENU_NONE},   
     {ITT_LRFUNC2, "SHOW PLAYER COORDS:", CrispyPlayerCoords, 0, MENU_NONE},
     {ITT_EMPTY, NULL, NULL, 0, MENU_NONE},
@@ -2088,6 +2096,14 @@ static void CrispySoundMono(int option)
     crispy->soundmono = !crispy->soundmono;
 }
 
+#ifdef PS3_BUILD
+// [PS3] Crispness -> Audible -> Music: OPL or a SoundFont (i_ps3music.c)
+static void PS3MusicSynth(int option)
+{
+    PS3_Music_CycleSynth(option == LEFT_DIR ? -1 : 1);
+}
+#endif
+
 static void CrispyTranslucency(int choice)
 {
     ChangeSettingEnum(&crispy->translucency, choice, NUM_TRANSLUCENCY);
@@ -3511,6 +3527,14 @@ static void DrawCrispness2(void)
 
     // Sound Channels
     DrawCrispnessMultiItem(snd_Channels >> 4, 181, 45, multiitem_sndchannels, false);
+
+#ifdef PS3_BUILD
+    // [PS3] Music: OPL or a SoundFont (i_ps3music.c)
+    dp_translation = cr[CR_GREEN];
+    MN_DrTextA(PS3_Music_SynthName(),
+               Crispness2Menu.x + MN_TextAWidth("MUSIC:") + 8, 55);
+    dp_translation = NULL;
+#endif
 
     DrawCrispnessSubheader("NAVIGATIONAL", 65);
 

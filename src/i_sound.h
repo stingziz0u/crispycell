@@ -265,6 +265,13 @@ extern const sound_module_t sound_ps3_module;
 #endif
 extern const music_module_t music_sdl_module;
 extern const music_module_t music_opl_module;
+#ifdef PS3_BUILD
+// [PS3] OPL or SoundFont music (i_ps3music.c)
+extern const music_module_t music_ps3_module;
+extern char *ps3_music_sf2;
+const char *PS3_Music_SynthName(void);
+void PS3_Music_CycleSynth(int dir);
+#endif
 extern const music_module_t music_pack_module;
 extern const music_module_t music_win_module;
 extern const music_module_t music_fl_module;

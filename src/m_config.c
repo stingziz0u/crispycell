@@ -1752,6 +1752,13 @@ static default_t extra_defaults_list[] =
     CONFIG_VARIABLE_INT(ps3_screen_fit),
 
     //!
+    // [PS3] Music synth: the .sf2 in USRDIR/soundfonts/ to play the music
+    // with, or empty for the original OPL.
+    //
+
+    CONFIG_VARIABLE_STRING(ps3_music_sf2),
+
+    //!
     // @game strife
     // [PS3] Joystick virtual button that shows the objectives (held).
     //

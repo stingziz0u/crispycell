@@ -46,6 +46,18 @@
 // (standalone games). Each mod saves to its own savegames/mod-<folder>
 // via -savedir, so its saves never show up in the base game's menu.
 //
+// Quit Game (1.2): quitting from the game's menu does not go back to
+// the XMB any more but to this launcher, to pick something else --
+// finishing SIGIL and going on to SIGIL II without leaving. I_Quit
+// (i_system.c) still runs every exit handler (config, sound, RSX) and
+// then, instead of exit(), calls PS3_Launcher_Relaunch(): it leaves a
+// marker file and replaces the process with a fresh copy of the EBOOT
+// (sysProcessExitSpawn2), so the next game starts from a clean engine
+// with nothing left over from the last one. The fresh launcher sees the
+// marker and always shows the menu, even with a single entry, and
+// CIRCLE there goes to the XMB. "Quit Game" from the XMB itself still
+// quits for good (i_main.c).
+//
 // Video: the launcher brings up RSX itself and leaves it up.
 // PS3_RSX_Init is not idempotent -- it memaligns a new IO buffer and
 // calls rsxInit unconditionally -- so I_InitGraphics' later call is
@@ -65,6 +77,9 @@
 #include <sys/stat.h>
 
 #include <io/pad.h>
+#include <sys/process.h>
+#include <lv2/process.h>
+#include <sysutil/sysutil.h>
 
 #include "doomtype.h"
 #include "m_misc.h"
@@ -74,6 +89,20 @@ extern void PS3_Log(const char *fmt, ...);
 extern void PS3_LogV(const char *fmt, ...);
 extern void PS3_RSX_Init(void);
 extern void PS3_RSX_Present(const u32 *src, int src_w, int src_h);
+extern void PS3_RSX_Release(void);
+
+// Left by PS3_Launcher_Relaunch for the next copy of the EBOOT.
+#define RETURN_MARKER PS3_USRDIR "/ps3_return_to_launcher"
+
+// Set while the menu is up: i_main.c's sysutil callback then only asks
+// RunMenu to leave ("Quit Game" from the XMB), since none of the
+// engine's exit handlers exist yet to shut things down.
+volatile boolean ps3_launcher_active = false;
+volatile boolean ps3_launcher_quit_requested = false;
+
+// Set by that callback when the XMB asked to quit: I_Quit then really
+// exits instead of coming back here.
+volatile boolean ps3_quit_to_xmb = false;
 
 #define LAUNCHER_W   640
 #define LAUNCHER_H   400
@@ -455,18 +484,25 @@ static const char *const mapxx_bases[]    = { "STRIFE1.WAD", NULL };
 static const struct { const char *file; const char *label; } known_names[] =
 {
     { "HEXEN.WAD",         "Hexen: Beyond Heretic" },
-    { "HEXDD.WAD",         "Hexen: Deathkings of the Dark Citadel" },
     { NULL, NULL }
 };
 
+// Deathkings of the Dark Citadel is not a game of its own in Crispy
+// Hexen: with HEXEN.WAD it side-loads HEXDD.WAD by itself (D_LoadHEXDD,
+// hexen/d_pwad.c -- -noautoload does not stop it, only -nosideload
+// would) and New Game then asks Hexen or Deathkings. Listing HEXDD.WAD
+// as a separate entry made the launcher appear for what is one game,
+// and that entry loaded it on -file, which is Crispy's "Deathkings
+// only" mode. As a companion of HEXEN.WAD it is simply not listed (base
+// games never put their companion on -file, the engine loads it).
 static const struct { const char *with; const char *music; } companions[] =
 {
+    { "HEXEN.WAD",         "HEXDD.WAD" },
     { NULL, NULL }
 };
 
 static const struct { const char *pwad; const char *iwad; } required_base[] =
 {
-    { "HEXDD.WAD",         "HEXEN.WAD" },
     { NULL, NULL }
 };
 
@@ -1353,6 +1389,7 @@ static void LoadScreenFit(void)
 #define PAD_RIGHT  8192
 #define PAD_DOWN   16384
 #define PAD_CROSS  64
+#define PAD_CIRCLE 32
 #define PAD_START  2048
 #define PAD_L1     4
 #define PAD_R1     8
@@ -1416,8 +1453,8 @@ static void DrawMenu(int tab, int selected, int top)
     const char *title = "CRISPY DOOM";
 #endif
     const boolean tabs = tab_count[TAB_MODS] > 0 && tab_count[TAB_GAMES] > 0;
-    const char *hint = tabs ? "D-PAD CHOOSE   L1/R1 GAMES/MODS   CROSS PLAY"
-                            : "D-PAD TO CHOOSE    CROSS TO PLAY";
+    const char *hint = tabs ? "D-PAD CHOOSE   L1/R1 GAMES/MODS   CROSS PLAY   CIRCLE EXIT"
+                            : "D-PAD TO CHOOSE    CROSS TO PLAY    CIRCLE TO EXIT";
     const int count = tab_count[tab];
     int row_h = 26;
     int i;
@@ -1487,7 +1524,8 @@ static void DrawMenu(int tab, int selected, int top)
     PS3_RSX_Present(fb, LAUNCHER_W, LAUNCHER_H);
 }
 
-// Returns an index into entries[].
+// Returns an index into entries[], or -1 to leave for the XMB (CIRCLE,
+// or "Quit Game" from the XMB while the menu is up).
 static int RunMenu(void)
 {
     int tab = tab_count[TAB_GAMES] > 0 ? TAB_GAMES : TAB_MODS;
@@ -1504,6 +1542,14 @@ static int RunMenu(void)
         int count;
 
         last = now;
+
+        // PS button / "Quit Game" from the XMB (i_main.c's callback)
+        sysUtilCheckCallback();
+
+        if (ps3_launcher_quit_requested || (pressed & PAD_CIRCLE))
+        {
+            return -1;
+        }
 
         if ((pressed & (PAD_L1 | PAD_R1 | PAD_LEFT | PAD_RIGHT))
          && tab_count[TAB_GAMES] > 0 && tab_count[TAB_MODS] > 0)
@@ -1545,6 +1591,26 @@ static int RunMenu(void)
 // Entry point
 // ---------------------------------------------------------------------
 
+// HEXDD.WAD is side-loaded by the engine, which looks next to the IWAD
+// and then in its WAD search path (D_FindWADByName). The launcher also
+// takes WADs from USRDIR/wads/, so HEXEN.WAD and HEXDD.WAD can end up
+// in different folders: DOOMWADDIR puts Deathkings' folder on the path.
+static void PointToSideloads(void)
+{
+#if defined(PS3_GAME_HEXEN)
+    wad_info_t *dd = FindByName("HEXDD.WAD");
+
+    if (dd != NULL)
+    {
+        char *dir = M_DirName(dd->path);
+
+        setenv("DOOMWADDIR", dir, 1);
+        PS3_Log("Launcher: Deathkings found in %s", dir);
+        free(dir);
+    }
+#endif
+}
+
 // A mod's -savedir. The engine creates the last level itself
 // (M_GetSaveGameDir), but not the parent, so both are made here.
 static void MakeSaveDir(const game_entry_t *g)
@@ -1568,6 +1634,17 @@ static void MakeSaveDir(const game_entry_t *g)
 //
 boolean PS3_Launcher_SelectIWAD(char *out_path, size_t out_size)
 {
+    // Coming back from a game's Quit Game: always show the menu, it is
+    // what the player asked for (even with one entry, where CIRCLE is
+    // then the way out).
+    boolean returning = M_FileExists(RETURN_MARKER);
+
+    if (returning)
+    {
+        remove(RETURN_MARKER);
+        PS3_Log("Launcher: back from Quit Game");
+    }
+
     num_found = 0;
     chosen_entry = 0;
 
@@ -1577,6 +1654,7 @@ boolean PS3_Launcher_SelectIWAD(char *out_path, size_t out_size)
     BuildEntries();
     ScanMods();
     BuildTabs();
+    PointToSideloads();
 
     if (num_entries == 0)
     {
@@ -1584,7 +1662,7 @@ boolean PS3_Launcher_SelectIWAD(char *out_path, size_t out_size)
         return false;
     }
 
-    if (num_entries == 1)
+    if (num_entries == 1 && !returning)
     {
         PS3_Log("Launcher: one entry, skipping menu");
         MakeSaveDir(&entries[0]);
@@ -1610,10 +1688,21 @@ boolean PS3_Launcher_SelectIWAD(char *out_path, size_t out_size)
     ioPadInit(MAX_PADS);
     PS3_RSX_Init();
 
+    ps3_launcher_active = true;
     chosen_entry = RunMenu();
+    ps3_launcher_active = false;
 
     free(fb);
     fb = NULL;
+
+    if (chosen_entry < 0)
+    {
+        // Nothing of the engine is up yet: only RSX (above) needs
+        // letting go of before exit, or the console goes down with us.
+        PS3_Log("Launcher: exit to the XMB");
+        PS3_RSX_Release();
+        exit(0);
+    }
 
     PS3_Log("Launcher: chose '%s' (iwad %s, %d add-on files, %d patches)",
             entries[chosen_entry].label, entries[chosen_entry].iwad,
@@ -1678,4 +1767,37 @@ const char *PS3_Launcher_GetSaveDir(void)
     }
 
     return entries[chosen_entry].savedir;
+}
+
+//
+// Called by I_Quit after every exit handler has run (config saved,
+// sound and RSX shut down): replaces this process with a fresh copy of
+// the EBOOT, which opens the launcher. Returns only when the game must
+// really exit -- "Quit Game" from the XMB, or the spawn failed -- and
+// the caller then exits as before.
+//
+void PS3_Launcher_Relaunch(void)
+{
+    FILE *marker;
+
+    if (ps3_quit_to_xmb)
+    {
+        return;
+    }
+
+    marker = fopen(RETURN_MARKER, "w");
+    if (marker == NULL)
+    {
+        PS3_Log("Launcher: cannot write %s, exiting instead", RETURN_MARKER);
+        return;
+    }
+    fclose(marker);
+
+    PS3_Log("Launcher: Quit Game, starting over from the launcher");
+    sysProcessExitSpawn2(PS3_USRDIR "/EBOOT.BIN", NULL, NULL, NULL, 0,
+                         1001, SYS_PROCESS_SPAWN_STACK_SIZE_1M);
+
+    // Only reached if the spawn failed.
+    PS3_Log("Launcher: sysProcessExitSpawn2 failed, exiting instead");
+    remove(RETURN_MARKER);
 }

@@ -55,6 +55,7 @@
 #include "p_saveg.h"
 
 #include "s_sound.h"
+#include "i_sound.h" // [PS3] PS3_Music_*
 
 #include "doomstat.h"
 
@@ -218,6 +219,7 @@ void M_Mouse(int choice); // [crispy] mouse sensitivity menu
 #ifdef PS3_BUILD
 static void M_PS3ToggleGamma(int choice);
 static void M_PS3ScreenFit(int choice);
+static void M_PS3MusicSynth(int choice);
 extern int joystick_look_invert;   // i_ps3joystick.c
 
 // [PS3] Short labels for the 18 gamma levels, dark to light (same as
@@ -521,6 +523,9 @@ enum
     crispness_soundfix,
     crispness_sndchannels,
     crispness_soundmono,
+#ifdef PS3_BUILD
+    crispness_ps3music,
+#endif
     crispness_sep_audible_,
 
     crispness_sep_navigational,
@@ -541,6 +546,9 @@ static menuitem_t Crispness2Menu[] =
     {2, "", M_CrispyToggleSoundfixes, 'm'},
     {2, "", M_CrispyToggleSndChannels, 's'},
     {2, "", M_CrispyToggleSoundMono, 'm'},
+#ifdef PS3_BUILD
+    {2, "", M_PS3MusicSynth, 'u'},
+#endif
     {-1, "", 0, '\0'},
     {-1, "", 0, '\0'},
     {2, "", M_CrispyToggleSmoothMap, 'm'},
@@ -1686,6 +1694,14 @@ static void M_DrawCrispness2(void)
     M_DrawCrispnessItem(crispness_soundfix, "Misc. Sound Fixes", crispy->soundfix, true);
     M_DrawCrispnessMultiItem(crispness_sndchannels, "Sound Channels", multiitem_sndchannels, snd_channels >> 4, snd_sfxdevice != SNDDEVICE_PCSPEAKER);
     M_DrawCrispnessItem(crispness_soundmono, "Mono SFX", crispy->soundmono, true);
+#ifdef PS3_BUILD
+    M_snprintf(crispy_menu_text, sizeof(crispy_menu_text),
+               "%sMusic: %s%s", crstr[CR_NONE], crstr[CR_GREEN],
+               PS3_Music_SynthName());
+    M_WriteText(currentMenu->x,
+                currentMenu->y + CRISPY_LINEHEIGHT * crispness_ps3music,
+                crispy_menu_text);
+#endif
 
     M_DrawCrispnessSeparator(crispness_sep_navigational, "Navigational");
     M_DrawCrispnessItem(crispness_smoothmap, "Smooth Automap Lines", crispy->smoothmap, true);
@@ -2059,6 +2075,12 @@ static void M_PS3ToggleGamma(int choice)
     crispy->gamma = (choice == 0) ? (crispy->gamma + 17) % 18
                                   : (crispy->gamma + 1) % 18;
     I_SetPalette(W_CacheLumpName(DEH_String("PLAYPAL"), PU_CACHE));
+}
+
+// [PS3] Crispness -> Audible -> Music: OPL or a SoundFont (i_ps3music.c)
+static void M_PS3MusicSynth(int choice)
+{
+    PS3_Music_CycleSynth(choice == 0 ? -1 : 1);
 }
 
 static void M_PS3ScreenFit(int choice)

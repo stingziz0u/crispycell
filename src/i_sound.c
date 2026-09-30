@@ -111,7 +111,12 @@ static const music_module_t *music_modules[] =
 #ifndef DISABLE_SDL2MIXER
     &music_sdl_module,
 #endif // DISABLE_SDL2MIXER
+#ifdef PS3_BUILD
+    // [PS3] the OPL module, plus the SoundFont player (i_ps3music.c)
+    &music_ps3_module,
+#else
     &music_opl_module,
+#endif
     NULL,
 };
 
@@ -586,6 +591,9 @@ void I_BindSoundVariables(void)
     M_BindStringVariable("timidity_cfg_path",    &timidity_cfg_path);
     M_BindStringVariable("gus_patch_path",       &gus_patch_path);
     M_BindIntVariable("gus_ram_kb",              &gus_ram_kb);
+#ifdef PS3_BUILD
+    M_BindStringVariable("ps3_music_sf2",        &ps3_music_sf2);
+#endif
 #ifdef _WIN32
     M_BindStringVariable("winmm_midi_device",    &winmm_midi_device);
     M_BindIntVariable("winmm_complevel",         &winmm_complevel);

@@ -280,6 +280,14 @@ void I_Quit (void)
 
 #ifndef PS3_BUILD
     SDL_Quit();
+#else
+    {
+        // [PS3] Quit Game goes back to the launcher (i_ps3launcher.c);
+        // this returns only when the game really has to exit.
+        extern void PS3_Launcher_Relaunch(void);
+
+        PS3_Launcher_Relaunch();
+    }
 #endif
 
     exit(0);

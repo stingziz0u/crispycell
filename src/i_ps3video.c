@@ -234,6 +234,14 @@ PS3_RSX_Shutdown(void)
     rsx_ready = false;
 }
 
+// The launcher's way out to the XMB (i_ps3launcher.c): it brought RSX
+// up itself, before any of the engine's exit handlers existed.
+void
+PS3_RSX_Release(void)
+{
+    PS3_RSX_Shutdown();
+}
+
 void
 PS3_RSX_Present(const u32 *src, int src_w, int src_h)
 {

@@ -74,6 +74,9 @@ extern boolean PS3_Launcher_SelectIWAD(char *out_path, size_t out_size);
 extern int PS3_Launcher_GetAddons(const char **paths, int max);
 extern int PS3_Launcher_GetDehs(const char **paths, int max);
 extern const char *PS3_Launcher_GetSaveDir(void);
+extern volatile boolean ps3_launcher_active;
+extern volatile boolean ps3_launcher_quit_requested;
+extern volatile boolean ps3_quit_to_xmb;
 
 // Fires when the PS button opens the XMB overlay or "Quit Game" is
 // picked from it. Registered below, but only ever delivered when
@@ -82,7 +85,11 @@ extern const char *PS3_Launcher_GetSaveDir(void);
 // outright while RSX still owns the display buffers and the audio port
 // is still open, which takes the whole console down, not just us.
 // I_Quit() runs every I_AtExit handler (config save, sound, RSX) and
-// then exits, which is exactly the clean path we want.
+// then exits, which is exactly the clean path we want. Since 1.2 the
+// game's own Quit Game goes back to the launcher instead of exiting
+// (i_ps3launcher.c); quitting from the XMB still has to leave, hence
+// ps3_quit_to_xmb. While the launcher's menu is up, the engine has no
+// exit handlers yet: the launcher shuts its RSX down and exits itself.
 static void PS3_SysutilCallback(u64 status, u64 param, void *userdata)
 {
     (void)param;
@@ -92,6 +99,12 @@ static void PS3_SysutilCallback(u64 status, u64 param, void *userdata)
     {
     case SYSUTIL_EXIT_GAME:
         PS3_Log("PS3_SysutilCallback: SYSUTIL_EXIT_GAME -- clean shutdown");
+        ps3_quit_to_xmb = true;
+        if (ps3_launcher_active)
+        {
+            ps3_launcher_quit_requested = true;
+            break;
+        }
         I_Quit();
         break;
     default:

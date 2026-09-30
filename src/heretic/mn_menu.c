@@ -34,6 +34,7 @@
 #include "p_local.h"
 #include "r_local.h"
 #include "s_sound.h"
+#include "i_sound.h" // [PS3] PS3_Music_*
 #include "v_video.h"
 #include "am_map.h"
 #include "v_trans.h" // [crispy] dp_translation
@@ -146,6 +147,9 @@ static boolean CrispySmoothing(int option);
 static boolean CrispyBrightmaps(int option);
 static boolean CrispySmoothLighting(int option);
 static boolean CrispySoundMono(int option);
+#ifdef PS3_BUILD
+static boolean PS3MusicSynth(int option);
+#endif
 static boolean CrispyLvlWpnSnd(int option);
 static boolean CrispyTranslucency(int option);
 static boolean CrispySndChannels(int option);
@@ -488,7 +492,11 @@ static MenuItem_t Crispness2Items[] = {
     {ITT_LRFUNC2, "MONO SFX:", CrispySoundMono, 0, MENU_NONE},
     {ITT_LRFUNC2, "SOUND CHANNELS:", CrispySndChannels, 0, MENU_NONE},
     {ITT_LRFUNC2, "ALIGN WEAPON VOLUMES:", CrispyLvlWpnSnd, 0, MENU_NONE},
+#ifdef PS3_BUILD
+    {ITT_LRFUNC2, "MUSIC:", PS3MusicSynth, 0, MENU_NONE},
+#else
     {ITT_EMPTY, NULL, NULL, 0, MENU_NONE},
+#endif
     {ITT_EMPTY, NULL, NULL, 0, MENU_NONE},
     {ITT_LRFUNC2, "SHOW LEVEL STATS:", CrispyAutomapStats, 0, MENU_NONE},
     {ITT_LRFUNC2, "SHOW LEVEL TIME:", CrispyLevelTime, 0, MENU_NONE},
@@ -1990,6 +1998,15 @@ static boolean CrispyLvlWpnSnd(int option)
     return true;
 }
 
+#ifdef PS3_BUILD
+// [PS3] Crispness -> Audible -> Music: OPL or a SoundFont (i_ps3music.c)
+static boolean PS3MusicSynth(int option)
+{
+    PS3_Music_CycleSynth(option == LEFT_DIR ? -1 : 1);
+    return true;
+}
+#endif
+
 static boolean CrispyTranslucency(int choice)
 {
     ChangeSettingEnum(&crispy->translucency, choice, NUM_TRANSLUCENCY);
@@ -3439,6 +3456,14 @@ static void DrawCrispness2(void)
 
     // Align weapon volumes
     DrawCrispnessItem(crispy->lvlwpnsnd, 219, 55);
+
+#ifdef PS3_BUILD
+    // [PS3] Music: OPL or a SoundFont (i_ps3music.c)
+    dp_translation = cr[CR_GREEN];
+    MN_DrTextA(PS3_Music_SynthName(),
+               Crispness2Menu.x + MN_TextAWidth("MUSIC:") + 8, 65);
+    dp_translation = NULL;
+#endif
 
     DrawCrispnessSubheader("NAVIGATIONAL", 75);
 

@@ -64,6 +64,10 @@ static volatile int ps3_peak = 0;
 // this block instead of opening their own. Mirrors opl_sdl.c's postmix
 // hook upstream.
 extern void PS3Sound_MixInto(float *dst, unsigned int frames, int ch);
+
+// src/i_ps3music.c: the music when it plays through a SoundFont instead
+// of the OPL (which is then silent), added in the same way.
+extern void PS3Music_MixInto(float *dst, unsigned int frames, int ch);
 static volatile unsigned long long ps3_regwrites = 0;
 static volatile unsigned long long ps3_callbacks = 0;
 static volatile unsigned long long ps3_zero_ns = 0;
@@ -176,6 +180,7 @@ static void FillBlock(float *dst, int block_frames, int ch)
         AdvanceTime((unsigned int)nsamples);
     }
 
+    PS3Music_MixInto(dst, (unsigned int)block_frames, ch);
     PS3Sound_MixInto(dst, (unsigned int)block_frames, ch);
 }
 

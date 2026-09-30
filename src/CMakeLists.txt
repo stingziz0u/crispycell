@@ -93,6 +93,7 @@ set(GAME_SOURCE_FILES
     i_ps3video.c
     i_ps3sound.c
     i_ps3launcher.c
+    i_ps3music.c
     i_ps3stubs.c
     i_videohr.c         i_videohr.h
     i_winmusic.c
