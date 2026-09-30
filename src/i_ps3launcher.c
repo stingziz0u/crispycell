@@ -51,9 +51,12 @@
 // finishing SIGIL and going on to SIGIL II without leaving. I_Quit
 // (i_system.c) still runs every exit handler (config, sound, RSX) and
 // then, instead of exit(), calls PS3_Launcher_Relaunch(): it leaves a
-// marker file and replaces the process with a fresh copy of the EBOOT
+// marker file and replaces the process with a fresh copy of the game
 // (sysProcessExitSpawn2), so the next game starts from a clean engine
-// with nothing left over from the last one. The fresh launcher sees the
+// with nothing left over from the last one. The copy is RELOAD.SELF,
+// the same program signed as a plain SELF (Makefile.crispypkg):
+// EBOOT.BIN is NPDRM and that call cannot start it -- tried in 1.2's
+// first build, the process just ended in the XMB. The fresh launcher sees the
 // marker and always shows the menu, even with a single entry, and
 // CIRCLE there goes to the XMB. "Quit Game" from the XMB itself still
 // quits for good (i_main.c).
@@ -91,8 +94,9 @@ extern void PS3_RSX_Init(void);
 extern void PS3_RSX_Present(const u32 *src, int src_w, int src_h);
 extern void PS3_RSX_Release(void);
 
-// Left by PS3_Launcher_Relaunch for the next copy of the EBOOT.
+// Left by PS3_Launcher_Relaunch for the next copy of the game.
 #define RETURN_MARKER PS3_USRDIR "/ps3_return_to_launcher"
+#define RELOAD_SELF   PS3_USRDIR "/RELOAD.SELF"
 
 // Set while the menu is up: i_main.c's sysutil callback then only asks
 // RunMenu to leave ("Quit Game" from the XMB), since none of the
@@ -1785,6 +1789,13 @@ void PS3_Launcher_Relaunch(void)
         return;
     }
 
+    // Without it the spawn would only end the process: better to say so.
+    if (!M_FileExists(RELOAD_SELF))
+    {
+        PS3_Log("Launcher: %s missing, exiting instead", RELOAD_SELF);
+        return;
+    }
+
     marker = fopen(RETURN_MARKER, "w");
     if (marker == NULL)
     {
@@ -1794,7 +1805,7 @@ void PS3_Launcher_Relaunch(void)
     fclose(marker);
 
     PS3_Log("Launcher: Quit Game, starting over from the launcher");
-    sysProcessExitSpawn2(PS3_USRDIR "/EBOOT.BIN", NULL, NULL, NULL, 0,
+    sysProcessExitSpawn2(RELOAD_SELF, NULL, NULL, NULL, 0,
                          1001, SYS_PROCESS_SPAWN_STACK_SIZE_1M);
 
     // Only reached if the spawn failed.

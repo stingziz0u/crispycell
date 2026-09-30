@@ -453,7 +453,10 @@ The `ps3/` directory holds everything specific to this port's build:
 
 `Makefile.crispypkg` in the project root packages an already-built `.elf`
 into an installable `.pkg`, using `ppu_rules`' automatic targets. It does
-not compile the engine.
+not compile the engine. Besides `EBOOT.BIN` it puts the same program in
+`USRDIR/RELOAD.SELF`, signed as a plain SELF: Quit Game restarts the game
+through it to get back to the launcher, since the system call that does
+that cannot start the NPDRM `EBOOT.BIN`.
 
 `pkgfiles-<game>/USRDIR/` is what ships inside each package. Doom's holds
 the shareware WAD; Heretic's, Hexen's and Strife's are empty, since their

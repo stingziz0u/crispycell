@@ -30,6 +30,20 @@ ICON0     := $(CRISPY_ROOT)ps3/icons/ICON0_$(PS3_GAME).PNG
 
 all: $(TARGET).pkg
 
+# Quit Game goes back to the launcher by starting the game over
+# (i_ps3launcher.c, PS3_Launcher_Relaunch). sysProcessExitSpawn2 cannot
+# start EBOOT.BIN -- it is an NPDRM SELF, which needs the NP DRM spawn
+# PSL1GHT does not have -- so the plain SELF ppu_rules already makes
+# ships next to it as RELOAD.SELF, the same trick as IRISMAN's reload
+# and RetroArch's cores. It goes straight into the staging folder the
+# %.pkg rule packs.
+$(TARGET).pkg: reloadself
+
+.PHONY: reloadself
+reloadself: $(TARGET).self
+	mkdir -p $(BUILDDIR)/pkg/USRDIR
+	cp $(TARGET).self $(BUILDDIR)/pkg/USRDIR/RELOAD.SELF
+
 $(TARGET).elf:
 	@true
 
