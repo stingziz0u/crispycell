@@ -22,6 +22,8 @@
 // wrote is still on disk -- same pattern as TyrQuakeCell's PS3_Log.
 #define PS3_LOG_PATH_A PS3_USRDIR "/crispy_log.txt"
 #define PS3_LOG_PATH_B "/dev_hdd0/tmp/crispy_log.txt"
+#define PS3_LOG_OLD_A  PS3_USRDIR "/crispy_log.old.txt"
+#define PS3_LOG_OLD_B  "/dev_hdd0/tmp/crispy_log.old.txt"
 
 static void PS3_LogTo(const char *path, const char *fmt, va_list argptr_orig)
 {
@@ -75,9 +77,19 @@ void PS3_LogV(const char *fmt, ...)
 // touching crt0/the linker script directly. If this line never shows
 // up in either log path, the .self isn't reaching user code at all
 // (a loading/format/signing problem, not a logic bug in our code).
+//
+// Each boot starts a fresh log; the previous session is kept as
+// crispy_log.old.txt, so a crash can still be read after relaunching.
+// Appending forever let the file grow for as long as the game was ever
+// played.
 __attribute__((constructor))
 static void PS3_EarliestLog(void)
 {
+    remove(PS3_LOG_OLD_A);
+    rename(PS3_LOG_PATH_A, PS3_LOG_OLD_A);
+    remove(PS3_LOG_OLD_B);
+    rename(PS3_LOG_PATH_B, PS3_LOG_OLD_B);
+
     PS3_Log("=== PS3_EarliestLog: C runtime constructor reached ===");
 }
 

@@ -215,6 +215,24 @@ void M_MusicVol(int choice);
 void M_SizeDisplay(int choice);
 void M_StartGame(int choice);
 void M_Mouse(int choice); // [crispy] mouse sensitivity menu
+#ifdef PS3_BUILD
+static void M_PS3ToggleGamma(int choice);
+static void M_PS3ScreenFit(int choice);
+extern int joystick_look_invert;   // i_ps3joystick.c
+
+// [PS3] Short labels for the 18 gamma levels, dark to light (same as
+// doom/m_menu.c): the gammamsg[] strings are too long for a menu line.
+static const char *const ps3_gamma_names[18] =
+{
+    "Darkest",
+    "Darker 8", "Darker 7", "Darker 6", "Darker 5",
+    "Darker 4", "Darker 3", "Darker 2", "Darker 1",
+    "Off",
+    "Brighter 1", "Brighter 2", "Brighter 3", "Brighter 4",
+    "Brighter 5", "Brighter 6", "Brighter 7",
+    "Brightest"
+};
+#endif
 void M_Sound(int choice);
 
 //void M_FinishReadThis(int choice); - [STRIFE] unused
@@ -377,7 +395,11 @@ menuitem_t OptionsMenu[] =
     {1, " ", M_EndGame, 'e', "End Game"},
     {2, " ", M_SizeDisplay, 's', "Screen Size"},
     {-1, "", 0, '\0'},
+#ifdef PS3_BUILD
+    {1, " ", M_Mouse, 'j', "Joystick Sensitivity"},
+#else
     {1, " ", M_Mouse, 'm', "Mouse Sensitivity"}, // [crispy] mouse sensitivity menu
+#endif
     {1, " ", M_Sound, 's', "Sound Volume"}, // [crispy] no longer "Settings" menu
     {1, " ", M_CrispnessCur, 'c', "Crispness"} // [crispy] Crispness menu
 };
@@ -432,10 +454,19 @@ enum
     crispness_sep_rendering,
     crispness_hires,
     crispness_widescreen,
+#ifndef PS3_BUILD
+    // [PS3] SDL renderer concepts: the RSX scans out in sync already and
+    // the blit is a fixed GPU scale (same as the other three games).
     crispness_smoothscaling,
+#endif
     crispness_uncapped,
     crispness_fpslimit,
+#ifdef PS3_BUILD
+    crispness_gamma,
+    crispness_screenfit,
+#else
     crispness_vsync,
+#endif
     crispness_sep_rendering_,
 
     crispness_sep_visual,
@@ -453,10 +484,17 @@ static menuitem_t Crispness1Menu[] =
     {-1, "", 0, '\0'},
     {2, "", M_CrispyToggleHires, 'h'},
     {2, "", M_CrispyToggleWidescreen, 'w'},
+#ifndef PS3_BUILD
     {2, "", M_CrispyToggleSmoothScaling, 's'},
+#endif
     {2, "", M_CrispyToggleUncapped, 'u'},
     {3, "", M_CrispyToggleFpsLimit, 'f'},
+#ifdef PS3_BUILD
+    {2, "", M_PS3ToggleGamma, 'g'},
+    {2, "", M_PS3ScreenFit, 't'},
+#else
     {2, "", M_CrispyToggleVsync, 'v'},
+#endif
     {-1, "", 0, '\0'},
     {-1, "", 0, '\0'},
     {2, "", M_CrispyToggleSmoothLighting, 's'},
@@ -1013,6 +1051,52 @@ void M_DoSave(int slot)
         M_StartMessage(DEH_String(QSAVESPOT), NULL, false);
 }
 
+#ifdef PS3_BUILD
+// i_ps3input.c
+extern boolean PS3_OSK_Start(const char *title, const char *initial,
+                             int maxlen);
+extern int PS3_OSK_TakeResult(char *out, size_t size);
+
+// [PS3] Puts what came back from the on-screen keyboard into the slot
+// being named, with the same rules as typing it (upper case, only what
+// the font can draw, and short enough to fit the slot).
+static void M_PS3SetSaveString(const char *text)
+{
+    char *dst = savegamestrings[quickSaveSlot];
+    int n = 0;
+
+    for (; *text != '\0' && n < SAVESTRINGSIZE - 2; text++)
+    {
+        int c = toupper((unsigned char) *text);
+
+        if (c != ' ' && (c - HU_FONTSTART < 0 || c - HU_FONTSTART >= HU_FONTSIZE))
+        {
+            continue;
+        }
+
+        dst[n++] = (char) c;
+        dst[n] = '\0';
+
+        if (M_StringWidth(dst) >= (SAVESTRINGSIZE - 2) * 8)
+        {
+            dst[--n] = '\0';
+            break;
+        }
+    }
+
+    dst[n] = '\0';
+
+    // Enter on an empty name is ignored upstream, which would leave a
+    // new game stuck on this screen: give it the default instead.
+    if (n == 0 || strspn(dst, " ") == (size_t) n)
+    {
+        M_snprintf(dst, SAVESTRINGSIZE, "STRIFEGUY %d", quickSaveSlot + 1);
+    }
+
+    saveCharIndex = strlen(dst);
+}
+#endif
+
 //
 // User wants to save. Start string input for M_Responder
 //
@@ -1036,6 +1120,24 @@ void M_SaveSelect(int choice)
     if (!strcmp(savegamestrings[choice], DEH_String(EMPTYSTRING)))
         savegamestrings[choice][0] = 0;
     saveCharIndex = strlen(savegamestrings[choice]);
+
+#ifdef PS3_BUILD
+    // [PS3] No keyboard: type the name on the XMB's own on-screen
+    // keyboard. M_Ticker collects the text and presses Enter (or
+    // Escape) for it, so everything after that is the upstream path.
+    // Should the keyboard fail to open, fill in a name the pad can
+    // just confirm with cross -- an empty one would never be accepted
+    // and the game could not be started at all.
+    if (!PS3_OSK_Start(namingCharacter ? "Name your character"
+                                       : "Name this save",
+                       savegamestrings[choice], SAVESTRINGSIZE - 2)
+     && savegamestrings[choice][0] == '\0')
+    {
+        M_snprintf(savegamestrings[choice], SAVESTRINGSIZE,
+                   "STRIFEGUY %d", choice + 1);
+        saveCharIndex = strlen(savegamestrings[choice]);
+    }
+#endif
 }
 
 //
@@ -1403,6 +1505,33 @@ void M_DrawMouse(void)
 {
     char mouse_menu_text[48];
 
+#ifdef PS3_BUILD
+    // [PS3] Same page as the other three games: the three stick speeds
+    // run 0-20, where 10 is 1.0x.
+    M_WriteText(MouseDef.x, MouseDef.y + LINEHEIGHT * mouse_horiz + 9,
+                "Turn Speed (Right Stick)");
+    M_DrawThermo(MouseDef.x, MouseDef.y + LINEHEIGHT * mouse_empty1,
+                 21, joystick_turn_sensitivity);
+
+    M_WriteText(MouseDef.x, MouseDef.y + LINEHEIGHT * mouse_horiz2 + 9,
+                "Move Speed (Left Stick)");
+    M_DrawThermo(MouseDef.x, MouseDef.y + LINEHEIGHT * mouse_empty2,
+                 21, joystick_move_sensitivity);
+
+    M_WriteText(MouseDef.x, MouseDef.y + LINEHEIGHT * mouse_vert + 9,
+                "Look Speed (Right Stick)");
+    M_DrawThermo(MouseDef.x, MouseDef.y + LINEHEIGHT * mouse_empty3,
+                 21, joystick_look_sensitivity);
+
+    M_snprintf(mouse_menu_text, sizeof(mouse_menu_text),
+               "Invert Look Up/Down: %s", joystick_look_invert ? "On" : "Off");
+    M_WriteText(MouseDef.x, MouseDef.y + LINEHEIGHT * mouse_invert + 9,
+                mouse_menu_text);
+
+    dp_translation = NULL;
+    return;
+#endif
+
     M_WriteText(MouseDef.x, MouseDef.y + LINEHEIGHT * mouse_horiz + 9,
                 "Horizontal: Turn");
 
@@ -1514,10 +1643,27 @@ static void M_DrawCrispness1(void)
     M_DrawCrispnessSeparator(crispness_sep_rendering, "Rendering");
     M_DrawCrispnessItem(crispness_hires, "High Resolution Rendering", crispy->hires, true);
     M_DrawCrispnessMultiItem(crispness_widescreen, "Aspect Ratio", multiitem_widescreen, crispy->widescreen, aspect_ratio_correct == 1);
+#ifndef PS3_BUILD
     M_DrawCrispnessItem(crispness_smoothscaling, "Smooth Pixel Scaling", smooth_pixel_scaling, !force_software_renderer);
+#endif
     M_DrawCrispnessItem(crispness_uncapped, "Uncapped Framerate", crispy->uncapped, true);
     M_DrawCrispnessNumericItem(crispness_fpslimit, "Framerate Limit", crispy->fpslimit, "None", crispy->uncapped, "35");
+#ifdef PS3_BUILD
+    M_snprintf(crispy_menu_text, sizeof(crispy_menu_text),
+               "%sGamma Correction: %s%s", crstr[CR_NONE], crstr[CR_GREEN],
+               ps3_gamma_names[crispy->gamma]);
+    M_WriteText(currentMenu->x,
+                currentMenu->y + CRISPY_LINEHEIGHT * crispness_gamma,
+                crispy_menu_text);
+    M_snprintf(crispy_menu_text, sizeof(crispy_menu_text),
+               "%sTV Screen Fit: %s%d%%", crstr[CR_NONE], crstr[CR_GREEN],
+               ps3_screen_fit);
+    M_WriteText(currentMenu->x,
+                currentMenu->y + CRISPY_LINEHEIGHT * crispness_screenfit,
+                crispy_menu_text);
+#else
     M_DrawCrispnessItem(crispness_vsync, "Enable VSync", crispy->vsync, !force_software_renderer);
+#endif
 
     M_DrawCrispnessSeparator(crispness_sep_visual, "Visual");
     M_DrawCrispnessItem(crispness_smoothlight, "Smooth Diminishing Lighting", crispy->smoothlight, true);
@@ -1832,6 +1978,13 @@ void M_QuitStrife(int choice)
 
 void M_ChangeSensitivity(int choice)
 {
+#ifdef PS3_BUILD
+    if (choice == 0 && joystick_turn_sensitivity > 0)
+        joystick_turn_sensitivity--;
+    else if (choice == 1 && joystick_turn_sensitivity < 20)
+        joystick_turn_sensitivity++;
+    return;
+#endif
     switch(choice)
     {
     case 0:
@@ -1847,6 +2000,13 @@ void M_ChangeSensitivity(int choice)
 
 void M_ChangeSensitivity_x2(int choice)
 {
+#ifdef PS3_BUILD
+    if (choice == 0 && joystick_move_sensitivity > 0)
+        joystick_move_sensitivity--;
+    else if (choice == 1 && joystick_move_sensitivity < 20)
+        joystick_move_sensitivity++;
+    return;
+#endif
     switch(choice)
     {
     case 0:
@@ -1862,6 +2022,13 @@ void M_ChangeSensitivity_x2(int choice)
 
 void M_ChangeSensitivity_y(int choice)
 {
+#ifdef PS3_BUILD
+    if (choice == 0 && joystick_look_sensitivity > 0)
+        joystick_look_sensitivity--;
+    else if (choice == 1 && joystick_look_sensitivity < 20)
+        joystick_look_sensitivity++;
+    return;
+#endif
     switch(choice)
     {
     case 0:
@@ -1878,8 +2045,34 @@ void M_ChangeSensitivity_y(int choice)
 void M_MouseInvert(int choice)
 {
     choice = 0;
+#ifdef PS3_BUILD
+    joystick_look_invert = !joystick_look_invert;
+#else
     mouse_y_invert = !mouse_y_invert;
+#endif
 }
+
+#ifdef PS3_BUILD
+// [PS3] F11 cycles gamma upstream; there is no F11 on a pad.
+static void M_PS3ToggleGamma(int choice)
+{
+    crispy->gamma = (choice == 0) ? (crispy->gamma + 17) % 18
+                                  : (crispy->gamma + 1) % 18;
+    I_SetPalette(W_CacheLumpName(DEH_String("PLAYPAL"), PU_CACHE));
+}
+
+static void M_PS3ScreenFit(int choice)
+{
+    if (choice == 0 && ps3_screen_fit > PS3_SCREEN_FIT_MIN)
+        ps3_screen_fit -= PS3_SCREEN_FIT_STEP;
+    else if (choice == 1 && ps3_screen_fit < PS3_SCREEN_FIT_MAX)
+        ps3_screen_fit += PS3_SCREEN_FIT_STEP;
+
+    // An odd value typed into the cfg would never land on a step.
+    ps3_screen_fit = BETWEEN(PS3_SCREEN_FIT_MIN, PS3_SCREEN_FIT_MAX,
+                             ps3_screen_fit);
+}
+#endif
 
 /*
 // haleyjd [STRIFE] Unused
@@ -2452,6 +2645,23 @@ boolean M_Responder (event_t* ev)
             key = key_menu_activate;
             joywait = I_GetTime() + 5;
         }
+
+#ifdef PS3_BUILD
+        // [PS3] joyb_quicksave / joyb_quickload (unbound by default).
+        // Only with no menu or dialogue open, where the buttons keep
+        // their menu meaning.
+        if (!menuactive && !messageToPrint)
+        {
+            if (JOY_BUTTON_PRESSED(joybquicksave))
+            {
+                key = key_menu_qsave;
+            }
+            else if (JOY_BUTTON_PRESSED(joybquickload))
+            {
+                key = key_menu_qload;
+            }
+        }
+#endif
     }
     else
     {
@@ -3254,6 +3464,36 @@ void M_Ticker (void)
         whichCursor2 ^= 1;
         cursorAnimCounter2 = 8;
     }
+
+#ifdef PS3_BUILD
+    {
+        // [PS3] The XMB keyboard finished: hand the name over and press
+        // Enter for it (Escape if it was canceled), so M_Responder runs
+        // the same code a typed name would.
+        char text[SAVESTRINGSIZE + 8];
+        const int result = PS3_OSK_TakeResult(text, sizeof(text));
+
+        if (result != 0 && saveStringEnter)
+        {
+            event_t ev;
+
+            memset(&ev, 0, sizeof(ev));
+            ev.type = ev_keydown;
+
+            if (result > 0)
+            {
+                M_PS3SetSaveString(text);
+                ev.data1 = KEY_ENTER;
+            }
+            else
+            {
+                ev.data1 = KEY_ESCAPE;
+            }
+
+            D_PostEvent(&ev);
+        }
+    }
+#endif
 }
 
 // [crispy]

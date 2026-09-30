@@ -73,6 +73,12 @@ static boolean gpu_scale_ready = false;
 
 static u32 *argb_buffer_fallback = NULL; // only used if gpu_scale_ready fails
 
+// [PS3] Share of the display the picture may use, in percent, to make
+// up for TVs that crop the edges (overscan). Settable from the menu
+// ("TV Screen Fit") and saved as ps3_screen_fit. 90 is what 1.0 had
+// hardwired; 100 fills a monitor edge to edge.
+int ps3_screen_fit = PS3_SCREEN_FIT_DEFAULT;
+
 static void
 PS3_RSX_FlipHandler(const u32 head)
 {
@@ -97,6 +103,7 @@ PS3_RSX_WaitForFreeBuffer(void)
 
 extern void PS3_Log(const char *fmt, ...);
 extern void PS3_LogV(const char *fmt, ...);
+extern void PS3_OSK_Update(void);
 
 void
 PS3_RSX_Init(void)
@@ -245,9 +252,9 @@ PS3_RSX_Present(const u32 *src, int src_w, int src_h)
     // represents is 4:3, and a 852x400 widescreen buffer is 16:9.
     // Blitting either into a fixed 16:9 box was stretching the 4:3 case
     // about a third too wide.
-    const float safe_area = 0.90f;
-    int max_w = (int)(rsx_display_w * safe_area);
-    int max_h = (int)(rsx_display_h * safe_area);
+    int fit = BETWEEN(PS3_SCREEN_FIT_MIN, PS3_SCREEN_FIT_MAX, ps3_screen_fit);
+    int max_w = rsx_display_w * fit / 100;
+    int max_h = rsx_display_h * fit / 100;
     int aspect_h = (SCREENHEIGHT_4_3 > 0) ? SCREENHEIGHT_4_3 : src_h;
     int out_w, out_h, off_x, off_y;
 
@@ -593,6 +600,10 @@ void I_FinishUpdate(void)
     // queue, and this is the one function that runs every frame.
     sysUtilCheckCallback();
 
+    // Moves the XMB keyboard along; its events arrive through the call
+    // above (i_ps3input.c).
+    PS3_OSK_Update();
+
     if (!initialized)
         return;
 
@@ -649,6 +660,7 @@ void I_DisplayFPSDots(boolean dots_on)
 
 void I_BindVideoVariables(void)
 {
+    M_BindIntVariable("ps3_screen_fit", &ps3_screen_fit);
 }
 
 void I_InitWindowTitle(void)

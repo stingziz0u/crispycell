@@ -127,81 +127,126 @@ static void FillBuffer(int16_t *buffer, unsigned int nsamples)
     OPL3_GenerateStream(&opl_chip, buffer, nsamples);
 }
 
-// Pulled by the hardware DMA notification -- same pattern as
-// PS3_AudioThread in common/snd_ps3.c, but the source is the OPL3
-// emulator instead of Quake's sound ring buffer.
-static void
-OPL_PS3_AudioThread(void *arg)
+// Renders one block: OPL3 music, advancing the music timer callbacks
+// sample-accurately, then the SFX summed on top.
+static void FillBlock(float *dst, int block_frames, int ch)
 {
-    int num_blocks = (int)audio_config.numBlocks;
-    int ch = (int)audio_config.channelCount;
-    int block_frames = AUDIO_BLOCK_SAMPLES;
     const float scale = 1.0f / 32768.0f;
+    unsigned int filled = 0;
 
-    while (audio_running) {
-        sys_event_t event;
-        s32 ret = sysEventQueueReceive(audio_queue, &event, 20 * 1000);
-        if (ret != 0)
-            continue;
+    while (filled < (unsigned int)block_frames)
+    {
+        uint64_t next_callback_time;
+        uint64_t nsamples;
 
-        int filling = (last_filled_buf + 1) % num_blocks;
-        last_filled_buf = filling;
-        ps3_blocks_written++;
-        if ((ps3_blocks_written % 188) == 0) {
-            PS3_LogV("OPL_PS3: blocks=%llu peak=%d regw=%llu cb=%llu zerons=%llu",
-                    ps3_blocks_written, ps3_peak, ps3_regwrites,
-                    ps3_callbacks, ps3_zero_ns);
-            ps3_peak = 0;
-        }
+        sysMutexLock(callback_queue_mutex, 0);
 
-        float *dst = (float *)(uintptr_t)audio_config.audioDataStart;
-        dst += filling * block_frames * ch;
-
-        unsigned int filled = 0;
-
-        while (filled < (unsigned int)block_frames)
+        if (opl_ps3_paused || OPL_Queue_IsEmpty(callback_queue))
         {
-            uint64_t next_callback_time;
-            uint64_t nsamples;
+            nsamples = block_frames - filled;
+        }
+        else
+        {
+            next_callback_time = OPL_Queue_Peek(callback_queue) + pause_offset;
 
-            sysMutexLock(callback_queue_mutex, 0);
+            nsamples = (next_callback_time - current_time) * mixing_freq;
+            nsamples = (nsamples + OPL_SECOND - 1) / OPL_SECOND;
 
-            if (opl_ps3_paused || OPL_Queue_IsEmpty(callback_queue))
+            if (nsamples > (uint64_t)(block_frames - filled))
             {
                 nsamples = block_frames - filled;
             }
-            else
-            {
-                next_callback_time = OPL_Queue_Peek(callback_queue) + pause_offset;
-
-                nsamples = (next_callback_time - current_time) * mixing_freq;
-                nsamples = (nsamples + OPL_SECOND - 1) / OPL_SECOND;
-
-                if (nsamples > (uint64_t)(block_frames - filled))
-                {
-                    nsamples = block_frames - filled;
-                }
-            }
-
-            sysMutexUnlock(callback_queue_mutex);
-
-            if (nsamples == 0) { ps3_zero_ns++; nsamples = 1; }
-            FillBuffer(mix_buffer, nsamples);
-
-            for (unsigned int i = 0; i < nsamples * (unsigned int)ch; i++)
-            {
-                int sv = mix_buffer[i];
-                if (sv < 0) sv = -sv;
-                if (sv > ps3_peak) ps3_peak = sv;
-                dst[filled * ch + i] = (float)mix_buffer[i] * scale;
-            }
-
-            filled += (unsigned int)nsamples;
-
-            AdvanceTime((unsigned int)nsamples);
         }
 
-        PS3Sound_MixInto(dst, (unsigned int)block_frames, ch);
+        sysMutexUnlock(callback_queue_mutex);
+
+        if (nsamples == 0) { ps3_zero_ns++; nsamples = 1; }
+        FillBuffer(mix_buffer, nsamples);
+
+        for (unsigned int i = 0; i < nsamples * (unsigned int)ch; i++)
+        {
+            int sv = mix_buffer[i];
+            if (sv < 0) sv = -sv;
+            if (sv > ps3_peak) ps3_peak = sv;
+            dst[filled * ch + i] = (float)mix_buffer[i] * scale;
+        }
+
+        filled += (unsigned int)nsamples;
+
+        AdvanceTime((unsigned int)nsamples);
+    }
+
+    PS3Sound_MixInto(dst, (unsigned int)block_frames, ch);
+}
+
+// How many blocks to keep written ahead of the one the hardware is
+// playing. 4 of 8 blocks of 256 frames at 48 kHz is ~21 ms of slack.
+#define PS3_AUDIO_LEAD_BLOCKS 4
+
+// Paced by the hardware DMA notification, but positioned by the
+// hardware itself: every wake-up reads which block is playing
+// (readIndex) and tops the ring up to PS3_AUDIO_LEAD_BLOCKS ahead of
+// it -- the PSL1GHT audiotest sample does the same.
+//
+// The first version just filled "the block after the last one I
+// filled" once per event. That holds only while no wake-up is ever late
+// or lost; once one was (Strife's long voices made it audible), the
+// writer ran behind the reader for good, overwriting blocks as they
+// played and leaving the hardware to replay stale ones -- speech that
+// stuttered and seemed to start over. A late wake-up now just fills
+// more blocks, and a writer that fell behind jumps back in front.
+static void
+OPL_PS3_AudioThread(void *arg)
+{
+    const int num_blocks = (int)audio_config.numBlocks;
+    const int ch = (int)audio_config.channelCount;
+    const int block_frames = AUDIO_BLOCK_SAMPLES;
+    volatile u64 *read_index =
+        (volatile u64 *)(uintptr_t)audio_config.readIndex;
+    float *data_start = (float *)(uintptr_t)audio_config.audioDataStart;
+    int next_fill = (last_filled_buf + 1) % num_blocks;
+
+    while (audio_running) {
+        sys_event_t event;
+        int playing, queued;
+
+        // Timeout or not, fall through and top the ring up: a missed
+        // notification must not cost a block.
+        sysEventQueueReceive(audio_queue, &event, 20 * 1000);
+
+        playing = (int)(*read_index % (u64)num_blocks);
+
+        // Blocks already written between the playing one and next_fill.
+        // The writer never gets more than PS3_AUDIO_LEAD_BLOCKS ahead, so
+        // anything more -- or next_fill being the playing block itself --
+        // can only mean the hardware lapped it during a long stall (the
+        // ring is circular, so that reads as "far ahead"). Restart right
+        // after the playing block rather than write into it.
+        queued = (next_fill - playing - 1 + num_blocks) % num_blocks;
+
+        if (next_fill == playing || queued > PS3_AUDIO_LEAD_BLOCKS)
+        {
+            next_fill = (playing + 1) % num_blocks;
+            queued = 0;
+        }
+
+        while (queued < PS3_AUDIO_LEAD_BLOCKS)
+        {
+            FillBlock(data_start + next_fill * block_frames * ch,
+                      block_frames, ch);
+
+            last_filled_buf = next_fill;
+            next_fill = (next_fill + 1) % num_blocks;
+            queued++;
+
+            ps3_blocks_written++;
+            if ((ps3_blocks_written % 188) == 0) {
+                PS3_LogV("OPL_PS3: blocks=%llu peak=%d regw=%llu cb=%llu zerons=%llu",
+                        ps3_blocks_written, ps3_peak, ps3_regwrites,
+                        ps3_callbacks, ps3_zero_ns);
+                ps3_peak = 0;
+            }
+        }
     }
 
     sysThreadExit(0);
@@ -310,8 +355,11 @@ static int OPL_PS3_Init(unsigned int port_base)
             mixing_freq, (int)mixing_channels, (int)audio_config.numBlocks);
 
     audio_running = 1;
+    // Priority 500, ahead of the game thread's 1000 (lower runs first
+    // on LV2): the ring holds ~21 ms, so audio must not queue behind a
+    // busy frame.
     ret = sysThreadCreate(&audio_thread_id, OPL_PS3_AudioThread, NULL,
-                           1000, 64 * 1024, THREAD_JOINABLE, (char *)"ps3_opl_audio");
+                           500, 64 * 1024, THREAD_JOINABLE, (char *)"ps3_opl_audio");
     if (ret != 0)
     {
         fprintf(stderr, "OPL PS3: sysThreadCreate failed (%d)\n", (int)ret);

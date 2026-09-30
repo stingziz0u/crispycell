@@ -29,6 +29,23 @@
 // Phase 1, Chex), one holding MAPxx is Doom II family. SIGIL replaces
 // E5Mx, so any ExMy match counts, not just E1M1.
 //
+// Mods (1.1): every subfolder of USRDIR/mods/ is one entry, listed on
+// a separate MODS tab (L1/R1 or d-pad left/right switch tabs). A mod
+// is whatever WADs and dehacked patches sit in its folder -- total
+// conversions like Aliens TC come as several of each -- loaded as
+// -file ... -deh ... on top of a base game picked the same way as for
+// add-ons: by the maps inside, or by an optional mod.txt:
+//
+//     name = Aliens TC        label shown in the list
+//     iwad = DOOM.WAD         base game, when the maps do not say
+//     file = ALIENS.WAD       load order; with any file lines, only
+//     file = ALIENS.DEH       the files listed are loaded
+//
+// Without mod.txt the WADs load in alphabetical order, then the
+// patches. An IWAD inside the folder is taken as the base game itself
+// (standalone games). Each mod saves to its own savegames/mod-<folder>
+// via -savedir, so its saves never show up in the base game's menu.
+//
 // Video: the launcher brings up RSX itself and leaves it up.
 // PS3_RSX_Init is not idempotent -- it memaligns a new IO buffer and
 // calls rsxInit unconditionally -- so I_InitGraphics' later call is
@@ -45,6 +62,7 @@
 #include <string.h>
 #include <strings.h>
 #include <dirent.h>
+#include <sys/stat.h>
 
 #include <io/pad.h>
 
@@ -60,8 +78,10 @@ extern void PS3_RSX_Present(const u32 *src, int src_w, int src_h);
 #define LAUNCHER_W   640
 #define LAUNCHER_H   400
 #define MAX_WADS     24
-#define MAX_ENTRIES  24
-#define MAX_FILES    4
+#define MAX_ENTRIES  48
+#define MAX_FILES    16   // i_main.c's PS3_MAX_ADDONS must be as big
+#define MAX_DEHS     8
+#define MODS_DIR     PS3_USRDIR "/mods"
 #define MAX_NAME     48
 #define MAX_PATH_LEN 320
 #define VISIBLE_ROWS 9
@@ -171,6 +191,12 @@ typedef struct
     char iwad[MAX_PATH_LEN];
     char files[MAX_FILES][MAX_PATH_LEN];
     int  num_files;
+    // Mods only (USRDIR/mods/<folder>/):
+    boolean is_mod;
+    char base_label[MAX_NAME];               // shown beside the name
+    char dehs[MAX_DEHS][MAX_PATH_LEN];       // -deh, in load order
+    int  num_dehs;
+    char savedir[MAX_PATH_LEN];              // -savedir
 } game_entry_t;
 
 static wad_info_t   found[MAX_WADS];
@@ -707,7 +733,11 @@ static void BuildEntries(void)
     {
         game_entry_t *g;
 
-        if (!found[i].is_iwad)
+        // Companions are never games of their own, whatever their header
+        // says: Strife's VOICES.WAD is marked IWAD, and listing it made
+        // an entry that cannot start (the engine loads it by itself,
+        // from next to STRIFE1.WAD).
+        if (!found[i].is_iwad || IsCompanion(found[i].file))
         {
             continue;
         }
@@ -819,13 +849,513 @@ static void BuildEntries(void)
 }
 
 // ---------------------------------------------------------------------
+// Mods (USRDIR/mods/<folder>/)
+// ---------------------------------------------------------------------
+
+// Dehacked patch extensions this engine understands. Hexen has no
+// dehacked support at all (h2_main.c never calls DEH_ParseCommandLine),
+// so there patches are ignored rather than passed along.
+static boolean IsDehFile(const char *name)
+{
+    size_t len = strlen(name);
+
+    if (len <= 4)
+    {
+        return false;
+    }
+
+    name += len - 4;
+
+#if defined(PS3_GAME_HEXEN)
+    (void) name;
+    return false;
+#elif defined(PS3_GAME_HERETIC)
+    return strcasecmp(name, ".HHE") == 0 || strcasecmp(name, ".DEH") == 0;
+#else
+    return strcasecmp(name, ".DEH") == 0 || strcasecmp(name, ".BEX") == 0;
+#endif
+}
+
+static int CompareNames(const void *a, const void *b)
+{
+    return strcasecmp((const char *) a, (const char *) b);
+}
+
+// Trims leading/trailing blanks and the line ending, in place.
+static char *Trim(char *str)
+{
+    char *end;
+
+    while (*str == ' ' || *str == '\t')
+    {
+        str++;
+    }
+
+    end = str + strlen(str);
+    while (end > str && (end[-1] == ' ' || end[-1] == '\t'
+                      || end[-1] == '\r' || end[-1] == '\n'))
+    {
+        *--end = '\0';
+    }
+
+    return str;
+}
+
+// One mod folder while it is being put together. Static rather than on
+// the stack: with its path arrays it is a few tens of KB, and the
+// launcher runs on the game thread before anything else.
+static struct
+{
+    char name[MAX_NAME];                     // mod.txt name =
+    char iwad[MAX_NAME];                     // mod.txt iwad =
+    char order[MAX_FILES + MAX_DEHS][MAX_NAME];  // mod.txt file =
+    int  num_order;
+    char wads[MAX_FILES][MAX_NAME];          // what the folder holds
+    int  num_wads;
+    char dehs[MAX_DEHS][MAX_NAME];
+    int  num_dehs;
+} mod;
+
+static void ReadModTxt(const char *path)
+{
+    char line[256];
+    FILE *fh;
+
+    fh = fopen(path, "r");
+    if (fh == NULL)
+    {
+        return;
+    }
+
+    while (fgets(line, sizeof(line), fh) != NULL)
+    {
+        char *key, *value, *eq;
+
+        key = Trim(line);
+        if (*key == '#' || *key == '\0')
+        {
+            continue;
+        }
+
+        eq = strchr(key, '=');
+        if (eq == NULL)
+        {
+            continue;
+        }
+
+        *eq = '\0';
+        key = Trim(key);
+        value = Trim(eq + 1);
+
+        if (*value == '\0')
+        {
+            continue;
+        }
+
+        if (strcasecmp(key, "name") == 0)
+        {
+            M_StringCopy(mod.name, value, sizeof(mod.name));
+        }
+        else if (strcasecmp(key, "iwad") == 0)
+        {
+            M_StringCopy(mod.iwad, value, sizeof(mod.iwad));
+        }
+        else if (strcasecmp(key, "file") == 0
+              && mod.num_order < MAX_FILES + MAX_DEHS)
+        {
+            M_StringCopy(mod.order[mod.num_order++], value, sizeof(mod.order[0]));
+        }
+    }
+
+    fclose(fh);
+}
+
+// Adds one file of the mod to the entry, as a WAD or as a patch by its
+// extension. Returns false (and logs) when the entry is already full.
+static boolean AddModFile(game_entry_t *g, const char *dir, const char *file)
+{
+    char full[MAX_PATH_LEN];
+
+    M_snprintf(full, sizeof(full), "%s/%s", dir, file);
+
+    if (IsDehFile(file))
+    {
+        if (g->num_dehs >= MAX_DEHS)
+        {
+            PS3_Log("Launcher: mod '%s': too many patches, dropping '%s'",
+                    g->label, file);
+            return false;
+        }
+        M_StringCopy(g->dehs[g->num_dehs++], full, sizeof(g->dehs[0]));
+    }
+    else
+    {
+        if (g->num_files >= MAX_FILES)
+        {
+            PS3_Log("Launcher: mod '%s': too many WADs, dropping '%s'",
+                    g->label, file);
+            return false;
+        }
+        M_StringCopy(g->files[g->num_files++], full, sizeof(g->files[0]));
+    }
+
+    return true;
+}
+
+// Finds a file of the folder listing by name, ignoring case. The PS3
+// filesystem is case-sensitive, so mod.txt is matched against what is
+// really there and the real spelling is what goes on the command line.
+static const char *FindModFile(const char *name)
+{
+    int i;
+
+    for (i = 0; i < mod.num_wads; i++)
+    {
+        if (strcasecmp(mod.wads[i], name) == 0)
+            return mod.wads[i];
+    }
+
+    for (i = 0; i < mod.num_dehs; i++)
+    {
+        if (strcasecmp(mod.dehs[i], name) == 0)
+            return mod.dehs[i];
+    }
+
+    return NULL;
+}
+
+static void BuildModEntry(const char *folder, const char *dir)
+{
+    wad_info_t   base_in_folder;
+    wad_info_t  *base = NULL;
+    wad_family_t family = FAMILY_UNKNOWN;
+    const char  *base_file = NULL;    // the folder's own IWAD, if used
+    game_entry_t *g;
+    char full[MAX_PATH_LEN];
+    int i;
+
+    memset(&base_in_folder, 0, sizeof(base_in_folder));
+
+    if (mod.num_wads == 0)
+    {
+        PS3_Log("Launcher: mod '%s' has no WADs, skipped", folder);
+        return;
+    }
+
+    // Look inside the WADs: an IWAD makes this a standalone game, and
+    // the first one with maps says which family of base game it needs.
+    for (i = 0; i < mod.num_wads; i++)
+    {
+        boolean is_iwad = false;
+        wad_family_t fam;
+
+        M_snprintf(full, sizeof(full), "%s/%s", dir, mod.wads[i]);
+
+        if (!InspectWad(full, &is_iwad, &fam))
+        {
+            continue;
+        }
+
+        if (is_iwad && base_file == NULL)
+        {
+            base_file = mod.wads[i];
+            M_StringCopy(base_in_folder.path, full, sizeof(base_in_folder.path));
+            M_StringCopy(base_in_folder.file, mod.wads[i],
+                         sizeof(base_in_folder.file));
+            M_StringCopy(base_in_folder.label, mod.wads[i],
+                         sizeof(base_in_folder.label));
+            base_in_folder.is_iwad = true;
+            base_in_folder.family = fam;
+        }
+
+        if (family == FAMILY_UNKNOWN && fam != FAMILY_UNKNOWN)
+        {
+            family = fam;
+        }
+    }
+
+    // 1. iwad = in mod.txt: the folder's own IWAD, or an installed one.
+    if (mod.iwad[0] != '\0')
+    {
+        if (base_file != NULL && strcasecmp(mod.iwad, base_file) == 0)
+        {
+            base = &base_in_folder;
+        }
+        else
+        {
+            base = FindByName(mod.iwad);
+
+            if (base == NULL || !base->is_iwad)
+            {
+                PS3_Log("Launcher: mod '%s' needs %s, not installed",
+                        folder, mod.iwad);
+                return;
+            }
+
+            base_file = NULL;   // the folder's IWAD, if any, loads as -file
+        }
+    }
+    // 2. an IWAD inside the folder: a standalone game.
+    else if (base_file != NULL)
+    {
+        base = &base_in_folder;
+    }
+    // 3. the maps say which family; 4. otherwise any base game at all,
+    // so mods that only replace graphics or sounds still get listed.
+    else
+    {
+        if (family != FAMILY_UNKNOWN)
+        {
+            base = BaseGameFor(family);
+        }
+        if (base == NULL)
+        {
+            base = BaseGameFor(FAMILY_MAPXX);
+        }
+        if (base == NULL)
+        {
+            base = BaseGameFor(FAMILY_EPISODIC);
+        }
+        if (base == NULL)
+        {
+            for (i = 0; i < num_found; i++)
+            {
+                if (found[i].is_iwad)
+                {
+                    base = &found[i];
+                    break;
+                }
+            }
+        }
+    }
+
+    if (base == NULL)
+    {
+        PS3_Log("Launcher: mod '%s' has no game to run on, skipped", folder);
+        return;
+    }
+
+    if (num_entries >= MAX_ENTRIES)
+    {
+        PS3_Log("Launcher: too many entries, mod '%s' skipped", folder);
+        return;
+    }
+
+    g = &entries[num_entries];
+    memset(g, 0, sizeof(*g));
+    g->is_mod = true;
+    M_StringCopy(g->iwad, base->path, sizeof(g->iwad));
+    M_StringCopy(g->base_label, base->label, sizeof(g->base_label));
+
+    if (mod.name[0] != '\0')
+    {
+        M_StringCopy(g->label, mod.name, sizeof(g->label));
+    }
+    else
+    {
+        // Folder name, underscores read as spaces: ALIENS_TC -> ALIENS TC.
+        char *c;
+
+        M_StringCopy(g->label, folder, sizeof(g->label));
+        for (c = g->label; *c != '\0'; c++)
+        {
+            if (*c == '_')
+                *c = ' ';
+        }
+    }
+
+    if (mod.num_order > 0)
+    {
+        // mod.txt decides: exactly these, in this order.
+        for (i = 0; i < mod.num_order; i++)
+        {
+            const char *real = FindModFile(mod.order[i]);
+
+            if (real == NULL)
+            {
+                PS3_Log("Launcher: mod '%s': '%s' from mod.txt not found",
+                        folder, mod.order[i]);
+                continue;
+            }
+
+            if (base_file != NULL && real == base_file)
+            {
+                continue;   // already the IWAD
+            }
+
+            AddModFile(g, dir, real);
+        }
+    }
+    else
+    {
+        for (i = 0; i < mod.num_wads; i++)
+        {
+            if (base_file != NULL && mod.wads[i] == base_file)
+            {
+                continue;
+            }
+            AddModFile(g, dir, mod.wads[i]);
+        }
+
+        for (i = 0; i < mod.num_dehs; i++)
+        {
+            AddModFile(g, dir, mod.dehs[i]);
+        }
+    }
+
+    M_snprintf(g->savedir, sizeof(g->savedir),
+               "%s/savegames/mod-%s", PS3_USRDIR, folder);
+
+    num_entries++;
+
+    PS3_Log("Launcher: mod '%s' = %s + %d WAD(s), %d patch(es)",
+            g->label, base->file, g->num_files, g->num_dehs);
+}
+
+static void ScanMods(void)
+{
+    DIR *top;
+    struct dirent *e;
+    // Folder names, collected first and sorted, so the tab has a stable
+    // order instead of whatever order the filesystem hands out.
+    static char folders[MAX_ENTRIES][MAX_NAME];
+    int num_folders = 0;
+    int f;
+
+    top = opendir(MODS_DIR);
+    if (top == NULL)
+    {
+        return;
+    }
+
+    while ((e = readdir(top)) != NULL && num_folders < MAX_ENTRIES)
+    {
+        if (e->d_name[0] == '.')
+        {
+            continue;
+        }
+        M_StringCopy(folders[num_folders++], e->d_name, sizeof(folders[0]));
+    }
+
+    closedir(top);
+
+    qsort(folders, num_folders, sizeof(folders[0]), CompareNames);
+
+    for (f = 0; f < num_folders; f++)
+    {
+        char dir[MAX_PATH_LEN];
+        char txt[MAX_PATH_LEN];
+        boolean have_txt = false;
+        DIR *d;
+
+        M_snprintf(dir, sizeof(dir), "%s/%s", MODS_DIR, folders[f]);
+
+        // opendir doubles as the "is it a folder" test: plain files in
+        // mods/ fail here and are ignored.
+        d = opendir(dir);
+        if (d == NULL)
+        {
+            continue;
+        }
+
+        memset(&mod, 0, sizeof(mod));
+
+        while ((e = readdir(d)) != NULL)
+        {
+            if (e->d_name[0] == '.')
+            {
+                continue;
+            }
+
+            if (HasWadExtension(e->d_name))
+            {
+                if (mod.num_wads < MAX_FILES)
+                    M_StringCopy(mod.wads[mod.num_wads++], e->d_name,
+                                 sizeof(mod.wads[0]));
+            }
+            else if (IsDehFile(e->d_name))
+            {
+                if (mod.num_dehs < MAX_DEHS)
+                    M_StringCopy(mod.dehs[mod.num_dehs++], e->d_name,
+                                 sizeof(mod.dehs[0]));
+            }
+            else if (strcasecmp(e->d_name, "mod.txt") == 0)
+            {
+                M_snprintf(txt, sizeof(txt), "%s/%s", dir, e->d_name);
+                have_txt = true;
+            }
+        }
+
+        closedir(d);
+
+        qsort(mod.wads, mod.num_wads, sizeof(mod.wads[0]), CompareNames);
+        qsort(mod.dehs, mod.num_dehs, sizeof(mod.dehs[0]), CompareNames);
+
+        if (have_txt)
+        {
+            ReadModTxt(txt);
+        }
+
+        BuildModEntry(folders[f], dir);
+    }
+}
+
+// ---------------------------------------------------------------------
+// TV Screen Fit
+// ---------------------------------------------------------------------
+
+// The launcher draws before the engine has read its config, so pick up
+// ps3_screen_fit from the cfg here -- otherwise a TV that needed 80 %
+// would still crop the launcher at the default. Same file M_LoadDefaults
+// reads it from later (the "extra" crispy-<game>.cfg).
+static void LoadScreenFit(void)
+{
+#if defined(PS3_GAME_HERETIC)
+    const char *cfg = PS3_USRDIR "/crispy-heretic.cfg";
+#elif defined(PS3_GAME_HEXEN)
+    const char *cfg = PS3_USRDIR "/crispy-hexen.cfg";
+#elif defined(PS3_GAME_STRIFE)
+    const char *cfg = PS3_USRDIR "/crispy-strife.cfg";
+#else
+    const char *cfg = PS3_USRDIR "/crispy-doom.cfg";
+#endif
+    char line[128];
+    FILE *fh;
+
+    fh = fopen(cfg, "r");
+    if (fh == NULL)
+    {
+        return;
+    }
+
+    while (fgets(line, sizeof(line), fh) != NULL)
+    {
+        int value;
+
+        if (sscanf(line, "ps3_screen_fit %d", &value) == 1)
+        {
+            ps3_screen_fit = value < PS3_SCREEN_FIT_MIN ? PS3_SCREEN_FIT_MIN
+                           : value > PS3_SCREEN_FIT_MAX ? PS3_SCREEN_FIT_MAX
+                           : value;
+            break;
+        }
+    }
+
+    fclose(fh);
+}
+
+// ---------------------------------------------------------------------
 // Input
 // ---------------------------------------------------------------------
 
+#define PAD_LEFT   32768
 #define PAD_UP     4096
+#define PAD_RIGHT  8192
 #define PAD_DOWN   16384
 #define PAD_CROSS  64
 #define PAD_START  2048
+#define PAD_L1     4
+#define PAD_R1     8
 
 static padInfo pad_info;
 static padData pad_data;
@@ -852,7 +1382,29 @@ static unsigned ReadPad(void)
 // Menu
 // ---------------------------------------------------------------------
 
-static void DrawMenu(int selected, int top)
+// Two tabs: base games and add-ons (what 1.0 listed), and mods. The
+// tab row only appears when there is at least one mod; with none the
+// launcher looks exactly like 1.0.
+#define TAB_GAMES 0
+#define TAB_MODS  1
+
+static int tab_items[2][MAX_ENTRIES];   // indices into entries[]
+static int tab_count[2];
+
+static void BuildTabs(void)
+{
+    int i;
+
+    tab_count[TAB_GAMES] = tab_count[TAB_MODS] = 0;
+
+    for (i = 0; i < num_entries; i++)
+    {
+        int t = entries[i].is_mod ? TAB_MODS : TAB_GAMES;
+        tab_items[t][tab_count[t]++] = i;
+    }
+}
+
+static void DrawMenu(int tab, int selected, int top)
 {
 #if defined(PS3_GAME_HERETIC)
     const char *title = "CRISPY HERETIC";
@@ -863,35 +1415,70 @@ static void DrawMenu(int selected, int top)
 #else
     const char *title = "CRISPY DOOM";
 #endif
-    const char *hint  = "D-PAD TO CHOOSE    CROSS TO PLAY";
+    const boolean tabs = tab_count[TAB_MODS] > 0 && tab_count[TAB_GAMES] > 0;
+    const char *hint = tabs ? "D-PAD CHOOSE   L1/R1 GAMES/MODS   CROSS PLAY"
+                            : "D-PAD TO CHOOSE    CROSS TO PLAY";
+    const int count = tab_count[tab];
     int row_h = 26;
     int i;
 
     FillRect(0, 0, LAUNCHER_W, LAUNCHER_H, COL_BG);
     DrawText((LAUNCHER_W - TextWidth(title, 3)) / 2, 34, title, COL_TITLE, 3);
 
-    for (i = 0; i < VISIBLE_ROWS && top + i < num_entries; i++)
+    if (tabs)
     {
-        int idx = top + i;
+        static const char *const names[2] = { "GAMES", "MODS" };
+        int x = LAUNCHER_W / 2 - TextWidth("GAMES", 2) - 24;
+        int t;
+
+        for (t = 0; t < 2; t++)
+        {
+            int w = TextWidth(names[t], 2);
+
+            DrawText(x, 70, names[t], t == tab ? COL_TITLE : COL_DIM, 2);
+            if (t == tab)
+            {
+                FillRect(x, 88, w, 2, COL_TITLE);
+            }
+            x += w + 48;
+        }
+    }
+
+    for (i = 0; i < VISIBLE_ROWS && top + i < count; i++)
+    {
+        int idx = tab_items[tab][top + i];
         int y = 100 + i * row_h;
         u32 colour = COL_TEXT;
 
-        if (idx == selected)
+        if (top + i == selected)
         {
             FillRect(26, y - 4, LAUNCHER_W - 52, row_h - 4, COL_SEL_BG);
             colour = COL_SEL_TX;
         }
 
         DrawText(44, y, entries[idx].label, colour, 2);
+
+        // A mod's base game, small and to the right, when it fits: it is
+        // the one thing about a mod entry the launcher decided by itself.
+        if (entries[idx].is_mod)
+        {
+            int lw = TextWidth(entries[idx].label, 2);
+            int bw = TextWidth(entries[idx].base_label, 1);
+
+            if (44 + lw + 16 + bw <= LAUNCHER_W - 40)
+            {
+                DrawText(LAUNCHER_W - 40 - bw, y + 4, entries[idx].base_label,
+                         top + i == selected ? COL_SEL_TX : COL_DIM, 1);
+            }
+        }
     }
 
     // Only worth saying there is more when the list actually scrolls.
-    if (num_entries > VISIBLE_ROWS)
+    if (count > VISIBLE_ROWS)
     {
         char counter[24];
 
-        M_snprintf(counter, sizeof(counter), "%d / %d",
-                   selected + 1, num_entries);
+        M_snprintf(counter, sizeof(counter), "%d / %d", selected + 1, count);
         DrawText(LAUNCHER_W - TextWidth(counter, 1) - 24,
                  LAUNCHER_H - 26, counter, COL_DIM, 1);
     }
@@ -900,50 +1487,76 @@ static void DrawMenu(int selected, int top)
     PS3_RSX_Present(fb, LAUNCHER_W, LAUNCHER_H);
 }
 
+// Returns an index into entries[].
 static int RunMenu(void)
 {
-    int selected = 0;
-    int top = 0;
-    unsigned last = 0;
+    int tab = tab_count[TAB_GAMES] > 0 ? TAB_GAMES : TAB_MODS;
+    int selected[2] = { 0, 0 };
+    int top[2] = { 0, 0 };
+    // Start as if everything were held: a button still down from the
+    // XMB (cross launched the game) must not pick an entry by itself.
+    unsigned last = ~0u;
 
     for (;;)
     {
         unsigned now = ReadPad();
         unsigned pressed = now & ~last;
+        int count;
 
         last = now;
 
+        if ((pressed & (PAD_L1 | PAD_R1 | PAD_LEFT | PAD_RIGHT))
+         && tab_count[TAB_GAMES] > 0 && tab_count[TAB_MODS] > 0)
+        {
+            tab = (pressed & (PAD_L1 | PAD_LEFT)) ? TAB_GAMES : TAB_MODS;
+        }
+
+        count = tab_count[tab];
+
         if (pressed & PAD_UP)
         {
-            selected = (selected + num_entries - 1) % num_entries;
+            selected[tab] = (selected[tab] + count - 1) % count;
         }
 
         if (pressed & PAD_DOWN)
         {
-            selected = (selected + 1) % num_entries;
+            selected[tab] = (selected[tab] + 1) % count;
         }
 
         if (pressed & (PAD_CROSS | PAD_START))
         {
-            return selected;
+            return tab_items[tab][selected[tab]];
         }
 
-        if (selected < top)
+        if (selected[tab] < top[tab])
         {
-            top = selected;
+            top[tab] = selected[tab];
         }
-        else if (selected >= top + VISIBLE_ROWS)
+        else if (selected[tab] >= top[tab] + VISIBLE_ROWS)
         {
-            top = selected - VISIBLE_ROWS + 1;
+            top[tab] = selected[tab] - VISIBLE_ROWS + 1;
         }
 
-        DrawMenu(selected, top);
+        DrawMenu(tab, selected[tab], top[tab]);
     }
 }
 
 // ---------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------
+
+// A mod's -savedir. The engine creates the last level itself
+// (M_GetSaveGameDir), but not the parent, so both are made here.
+static void MakeSaveDir(const game_entry_t *g)
+{
+    if (g->savedir[0] == '\0')
+    {
+        return;
+    }
+
+    mkdir(PS3_USRDIR "/savegames", 0777);
+    mkdir(g->savedir, 0777);
+}
 
 //
 // Returns true and fills out_path with the IWAD to run. Returns false
@@ -962,6 +1575,8 @@ boolean PS3_Launcher_SelectIWAD(char *out_path, size_t out_size)
     ScanDir(PS3_USRDIR);
 
     BuildEntries();
+    ScanMods();
+    BuildTabs();
 
     if (num_entries == 0)
     {
@@ -972,6 +1587,7 @@ boolean PS3_Launcher_SelectIWAD(char *out_path, size_t out_size)
     if (num_entries == 1)
     {
         PS3_Log("Launcher: one entry, skipping menu");
+        MakeSaveDir(&entries[0]);
         M_StringCopy(out_path, entries[0].iwad, out_size);
         return true;
     }
@@ -985,10 +1601,12 @@ boolean PS3_Launcher_SelectIWAD(char *out_path, size_t out_size)
     if (fb == NULL)
     {
         PS3_Log("Launcher: framebuffer alloc failed, using first entry");
+        MakeSaveDir(&entries[0]);
         M_StringCopy(out_path, entries[0].iwad, out_size);
         return true;
     }
 
+    LoadScreenFit();
     ioPadInit(MAX_PADS);
     PS3_RSX_Init();
 
@@ -997,10 +1615,11 @@ boolean PS3_Launcher_SelectIWAD(char *out_path, size_t out_size)
     free(fb);
     fb = NULL;
 
-    PS3_Log("Launcher: chose '%s' (iwad %s, %d add-on files)",
+    PS3_Log("Launcher: chose '%s' (iwad %s, %d add-on files, %d patches)",
             entries[chosen_entry].label, entries[chosen_entry].iwad,
-            entries[chosen_entry].num_files);
+            entries[chosen_entry].num_files, entries[chosen_entry].num_dehs);
 
+    MakeSaveDir(&entries[chosen_entry]);
     M_StringCopy(out_path, entries[chosen_entry].iwad, out_size);
     return true;
 }
@@ -1025,4 +1644,38 @@ int PS3_Launcher_GetAddons(const char **paths, int max)
     }
 
     return n;
+}
+
+//
+// Same for the dehacked patches that go on -deh (mods only).
+//
+int PS3_Launcher_GetDehs(const char **paths, int max)
+{
+    int i, n = 0;
+
+    if (num_entries == 0)
+    {
+        return 0;
+    }
+
+    for (i = 0; i < entries[chosen_entry].num_dehs && n < max; i++)
+    {
+        paths[n++] = entries[chosen_entry].dehs[i];
+    }
+
+    return n;
+}
+
+//
+// The -savedir for the chosen entry, or NULL to keep the engine's own
+// savegames/<iwad>/ (everything that is not a mod).
+//
+const char *PS3_Launcher_GetSaveDir(void)
+{
+    if (num_entries == 0 || entries[chosen_entry].savedir[0] == '\0')
+    {
+        return NULL;
+    }
+
+    return entries[chosen_entry].savedir;
 }

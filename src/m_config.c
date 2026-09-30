@@ -1719,6 +1719,67 @@ static default_t extra_defaults_list[] =
 
     CONFIG_VARIABLE_INT(joyb_flycenter),
 
+#ifdef PS3_BUILD
+    //!
+    // [PS3] Joystick virtual button for quicksave.
+    //
+
+    CONFIG_VARIABLE_INT(joyb_quicksave),
+
+    //!
+    // [PS3] Joystick virtual button for quickload.
+    //
+
+    CONFIG_VARIABLE_INT(joyb_quickload),
+
+    //!
+    // [PS3] Joystick virtual button to zoom the automap in (while held).
+    //
+
+    CONFIG_VARIABLE_INT(joyb_map_zoomin),
+
+    //!
+    // [PS3] Joystick virtual button to zoom the automap out (while held).
+    //
+
+    CONFIG_VARIABLE_INT(joyb_map_zoomout),
+
+    //!
+    // [PS3] Share of the TV picture used, in percent (70-100), to fit
+    // screens that crop the edges (overscan).
+    //
+
+    CONFIG_VARIABLE_INT(ps3_screen_fit),
+
+    //!
+    // @game strife
+    // [PS3] Joystick virtual button that shows the objectives (held).
+    //
+
+    CONFIG_VARIABLE_INT(joyb_mission),
+
+    //!
+    // @game strife
+    // [PS3] Joystick virtual button that uses a medkit.
+    //
+
+    CONFIG_VARIABLE_INT(joyb_usehealth),
+
+    //!
+    // @game strife
+    // [PS3] Joystick virtual button that shows the keys (held).
+    //
+
+    CONFIG_VARIABLE_INT(joyb_invkey),
+
+    //!
+    // @game strife
+    // [PS3] Joystick virtual button that drops the selected item.
+    //
+
+    CONFIG_VARIABLE_INT(joyb_invdrop),
+#endif
+
     //!
     // Key to pause or unpause the game.
     //

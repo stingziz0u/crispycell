@@ -29,6 +29,9 @@
 #include "i_swap.h"
 #include "m_argv.h"
 #include "m_controls.h"
+#ifdef PS3_BUILD
+extern boolean automapactive;   // [PS3] am_map.c, for SetJoyButtons
+#endif
 #include "m_misc.h"
 #include "m_random.h"
 #include "p_local.h"
@@ -1123,6 +1126,18 @@ static void SetJoyButtons(unsigned int buttons_mask)
         {
             // Weapon cycling:
 
+#ifdef PS3_BUILD
+            // [PS3] With the automap open the zoom buttons belong to the
+            // map (am_map.c), so they must not cycle weapons as well.
+            // Checked by binding, not by button, so moving the zoom
+            // elsewhere in the cfg frees the d-pad again.
+            if (automapactive
+             && (i == joybmapzoomin || i == joybmapzoomout))
+            {
+                ;
+            }
+            else
+#endif
             if (i == joybprevweapon)
             {
                 next_weapon = -1;

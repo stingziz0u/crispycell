@@ -625,6 +625,16 @@ void AM_clearMarks(void)
 // should be called at the start of every level
 // right now, i figure it out myself
 //
+#ifdef PS3_BUILD
+// [PS3] The automap zoom the player picked, carried over to the next
+// level instead of going back to the default every map. Kept together
+// with the map-area height it was measured at, so a resolution change
+// in between (hires, widescreen) rescales it the same way the reinit
+// path below does. 0 = never zoomed this session.
+static fixed_t ps3_kept_scale = 0;
+static int     ps3_kept_f_h = 0;
+#endif
+
 void AM_LevelInit(boolean reinit)
 {
     fixed_t a, b;
@@ -655,6 +665,19 @@ void AM_LevelInit(boolean reinit)
     a = FixedDiv(f_w, (max_w>>MAPBITS < 2048) ? 2*(max_w>>MAPBITS) : 4096);
     b = FixedDiv(f_h, (max_h>>MAPBITS < 2048) ? 2*(max_h>>MAPBITS) : 4096);
     scale_mtof = FixedDiv(a < b ? a : b, (int) (0.7*MAPUNIT));
+#ifdef PS3_BUILD
+    if (ps3_kept_scale > 0 && ps3_kept_f_h > 0)
+    {
+        scale_mtof = (fixed_t) ((long long) ps3_kept_scale * f_h
+                                / ps3_kept_f_h);
+
+        // Every map has its own limits; stay inside this one's.
+        if (scale_mtof < min_scale_mtof)
+            scale_mtof = min_scale_mtof;
+        else if (scale_mtof > max_scale_mtof)
+            scale_mtof = max_scale_mtof;
+    }
+#endif
     }
     if (scale_mtof > max_scale_mtof)
 	scale_mtof = min_scale_mtof;
@@ -930,6 +953,38 @@ AM_Responder
         return true;
     }
 
+#ifdef PS3_BUILD
+    // [PS3] Automap zoom on the pad (joyb_map_zoomin / joyb_map_zoomout,
+    // d-pad up/down by default), held like the keyboard +/- keys: zoom
+    // while the button is down, stop on release. The event is not eaten
+    // -- G_Responder still needs the stick axes from it -- and g_game.c
+    // skips weapon cycling for these two buttons while the map is open.
+    if (automapactive && ev->type == ev_joystick)
+    {
+        static boolean joyzoom = false;
+
+        if (joybmapzoomin >= 0 && (ev->data1 & (1 << joybmapzoomin)) != 0)
+        {
+            mtof_zoommul = m_zoomin_kbd;
+            ftom_zoommul = m_zoomout_kbd;
+            joyzoom = true;
+        }
+        else if (joybmapzoomout >= 0
+              && (ev->data1 & (1 << joybmapzoomout)) != 0)
+        {
+            mtof_zoommul = m_zoomout_kbd;
+            ftom_zoommul = m_zoomin_kbd;
+            joyzoom = true;
+        }
+        else if (joyzoom)
+        {
+            mtof_zoommul = FRACUNIT;
+            ftom_zoommul = FRACUNIT;
+            joyzoom = false;
+        }
+    }
+#endif
+
     if (!automapactive)
     {
 	if (ev->type == ev_keydown && ev->data1 == key_map_toggle)
@@ -1168,6 +1223,13 @@ void AM_changeWindowScale(void)
 	AM_maxOutWindowScale();
     else
 	AM_activateNewScale();
+
+#ifdef PS3_BUILD
+    // Remember it for the next level (see AM_LevelInit). Only zooming
+    // gets here, so the per-map default never overwrites a choice.
+    ps3_kept_scale = scale_mtof;
+    ps3_kept_f_h = f_h;
+#endif
 }
 
 //

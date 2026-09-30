@@ -29,6 +29,10 @@
 #include "m_fixed.h"
 #include "i_timer.h"
 #include "i_video.h"
+#include "m_controls.h"
+
+// i_ps3input.c: true while the XMB on-screen keyboard is up.
+extern boolean PS3_OSK_Active(void);
 
 // paddata.button[] index layout (see TyrQuakeCell's in_ps3.c):
 //   [2],[3]  -- digital buttons, 16-bit bitmask split across two bytes
@@ -85,6 +89,62 @@ static padData pad_data;
 static boolean pad_ready = false;
 
 #define STICK_DEADZONE 24  // sticks rarely rest at exactly 128
+
+#ifdef PS3_GAME_STRIFE
+// [PS3] Strife has actions that upstream only offers as keys (see the
+// joyb* comment in m_controls.c). They are sent as that key going down
+// and up again, because two of them are "hold to show" pop-ups: the
+// status bar reads the key release to hide them. Never sent while a
+// menu or a dialogue is open, where these letters are menu shortcuts.
+extern boolean menuactive;
+
+static struct
+{
+    int *joyb;
+    int *key;
+    boolean down;   // a keydown went out and its keyup is still owed
+} strife_keys[] =
+{
+    { &joybmission,   &key_mission,   false },
+    { &joybusehealth, &key_usehealth, false },
+    { &joybinvkey,    &key_invkey,    false },
+    { &joybinvdrop,   &key_invdrop,   false },
+};
+
+static void PostKey(evtype_t type, int key)
+{
+    event_t ev;
+
+    memset(&ev, 0, sizeof(ev));
+    ev.type = type;
+    // data2 too: the objectives pop-up is kept open by
+    // "ev->data2 ^ key_mission" being zero (st_stuff.c).
+    ev.data1 = ev.data2 = ev.data3 = key;
+    D_PostEvent(&ev);
+}
+
+static void StrifeKeys(unsigned vbuttons)
+{
+    size_t i;
+
+    for (i = 0; i < sizeof(strife_keys) / sizeof(strife_keys[0]); i++)
+    {
+        const int b = *strife_keys[i].joyb;
+        const boolean on = b >= 0 && b < 32 && (vbuttons & (1u << b)) != 0;
+
+        if (on && !strife_keys[i].down && !menuactive)
+        {
+            PostKey(ev_keydown, *strife_keys[i].key);
+            strife_keys[i].down = true;
+        }
+        else if (!on && strife_keys[i].down)
+        {
+            PostKey(ev_keyup, *strife_keys[i].key);
+            strife_keys[i].down = false;
+        }
+    }
+}
+#endif
 
 void I_InitJoystick(void)
 {
@@ -143,9 +203,21 @@ void I_UpdateJoystick(void)
     int leftx, lefty;
     int i;
     boolean found = false;
+    // Buttons still held from before an on-screen keyboard closed: the
+    // cross that confirmed the text must not arrive as a fresh press.
+    static unsigned held_until_release = 0;
+    static boolean osk_was_up = false;
 
     if (!pad_ready)
     {
+        return;
+    }
+
+    // The XMB keyboard reads the pad itself; the game must not see those
+    // presses too.
+    if (PS3_OSK_Active())
+    {
+        osk_was_up = true;
         return;
     }
 
@@ -177,6 +249,32 @@ void I_UpdateJoystick(void)
     }
 
     buttons = (pad_data.button[2] << 8) | (pad_data.button[3] & 0xff);
+
+    if (osk_was_up)
+    {
+        held_until_release = buttons;
+        osk_was_up = false;
+    }
+
+#ifdef PS3_GAME_STRIFE
+    {
+        // [PS3] Same for a menu or dialogue closing: in Strife cross both
+        // picks a dialogue answer and is Use in game, so the press that
+        // said "Bye" reached the game still held and talked to the same
+        // character again -- the conversation (and its voice) restarted
+        // instead of ending. Buttons held as the menu closes are ignored
+        // until they are let go.
+        static boolean menu_was_up = false;
+
+        if (menu_was_up && !menuactive)
+        {
+            held_until_release |= buttons;
+        }
+        menu_was_up = menuactive;
+    }
+#endif
+    held_until_release &= buttons;      // forget what has been let go
+    buttons &= ~held_until_release;
 
     ev.type = ev_joystick;
     ev.data1 = 0;
@@ -211,6 +309,10 @@ void I_UpdateJoystick(void)
     ev.data5 = ScaleStickAxis(pad_data.button[5],
                               joystick_look_invert != 0); // right Y -> look
     ev.data6 = GetDirectionalInput(buttons, leftx, lefty);
+
+#ifdef PS3_GAME_STRIFE
+    StrifeKeys((unsigned) ev.data1);
+#endif
 
     D_PostEvent(&ev);
 }

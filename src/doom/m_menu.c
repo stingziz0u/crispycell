@@ -266,6 +266,9 @@ static void M_DrawReadThis2(void);
 static void M_DrawNewGame(void);
 static void M_DrawEpisode(void);
 static void M_DrawOptions(void);
+#ifdef PS3_BUILD
+static void M_PS3ScreenFit(int choice);
+#endif
 static void M_DrawMouse(void); // [crispy] mouse sensitivity menu
 static void M_DrawSound(void);
 static void M_DrawLoad(void);
@@ -502,6 +505,7 @@ enum
     crispness_fpslimit,
 #ifdef PS3_BUILD
     crispness_gamma,
+    crispness_screenfit,
 #endif
 #ifndef PS3_BUILD
     // [PS3] RSX drives the scanout directly and the blit is a fixed GPU
@@ -534,6 +538,9 @@ static menuitem_t Crispness1Menu[]=
     {4,"",	M_CrispyToggleFpsLimit,'f'},
 #ifdef PS3_BUILD
     {3,"",	M_CrispyToggleGamma,'g'},
+    // [PS3] Kept out of Options: one more slider there pushed Crispness
+    // into the status bar. Status 2 = slider (left/right, cross = right).
+    {2,"",	M_PS3ScreenFit,'t'},
 #endif
 #ifndef PS3_BUILD
     {3,"",	M_CrispyToggleVsync,'v'},
@@ -1494,6 +1501,27 @@ void M_DrawOptions(void)
 		 9 + (crispy->widescreen ? 6 : 3),screenSize); // [crispy] Crispy HUD
 }
 
+#ifdef PS3_BUILD
+static void M_PS3ScreenFit(int choice)
+{
+    switch (choice)
+    {
+      case 0:
+        if (ps3_screen_fit > PS3_SCREEN_FIT_MIN)
+            ps3_screen_fit -= PS3_SCREEN_FIT_STEP;
+        break;
+      case 1:
+        if (ps3_screen_fit < PS3_SCREEN_FIT_MAX)
+            ps3_screen_fit += PS3_SCREEN_FIT_STEP;
+        break;
+    }
+
+    // An odd value typed into the cfg would never land on a step.
+    ps3_screen_fit = BETWEEN(PS3_SCREEN_FIT_MIN, PS3_SCREEN_FIT_MAX,
+                             ps3_screen_fit);
+}
+#endif
+
 // [crispy] mouse sensitivity menu
 static void M_DrawMouse(void)
 {
@@ -1659,6 +1687,13 @@ static void M_DrawCrispness1(void)
                ps3_gamma_names[crispy->gamma]);
     M_WriteText(currentMenu->x,
                 currentMenu->y + CRISPY_LINEHEIGHT * crispness_gamma,
+                crispy_menu_text);
+
+    M_snprintf(crispy_menu_text, sizeof(crispy_menu_text),
+               "%sTV Screen Fit: %s%d%%", crstr[CR_NONE], crstr[CR_GREEN],
+               ps3_screen_fit);
+    M_WriteText(currentMenu->x,
+                currentMenu->y + CRISPY_LINEHEIGHT * crispness_screenfit,
                 crispy_menu_text);
 #endif
 
@@ -2577,8 +2612,6 @@ boolean M_Responder (event_t* ev)
 // circle backs out.
 #define PS3_MENU_CONFIRM 0   // cross
 #define PS3_MENU_BACK    2   // circle
-#define PS3_BTN_QSAVE    3   // triangle
-#define PS3_BTN_QLOAD    2   // circle
 #else
 #define JOY_BUTTON_PRESSED(x) (JOY_BUTTON_MAPPED(x) && (ev->data1 & (1 << (x))) != 0)
 #define PS3_MENU_CONFIRM joybfire
@@ -2634,17 +2667,17 @@ boolean M_Responder (event_t* ev)
         }
 
 #ifdef PS3_BUILD
-        // Quick save/load have no joyb* binding in Doom -- they are key
-        // actions only -- so synthesise the keypress here. Guarded on
-        // !menuactive so triangle/circle keep their menu meaning while
-        // the menu is open (circle backs out).
+        // Quick save/load are key actions upstream; joyb_quicksave and
+        // joyb_quickload (m_controls.c, rebindable in the cfg) map them
+        // onto the pad. Guarded on !menuactive so the buttons keep their
+        // menu meaning while the menu is open (circle backs out).
         if (!menuactive)
         {
-            if (JOY_BUTTON_PRESSED(PS3_BTN_QSAVE))
+            if (JOY_BUTTON_PRESSED(joybquicksave))
             {
                 key = key_menu_qsave;
             }
-            else if (JOY_BUTTON_PRESSED(PS3_BTN_QLOAD))
+            else if (JOY_BUTTON_PRESSED(joybquickload))
             {
                 key = key_menu_qload;
             }

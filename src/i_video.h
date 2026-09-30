@@ -136,4 +136,15 @@ extern unsigned int joywait;
 extern int usemouse;
 
 
+#ifdef PS3_BUILD
+// [PS3] "TV Screen Fit": share of the display the picture may use, in
+// percent, for TVs that crop the edges. i_ps3video.c owns the value,
+// the menus step it, the launcher reads it back from the cfg.
+#define PS3_SCREEN_FIT_MIN     70
+#define PS3_SCREEN_FIT_MAX     100
+#define PS3_SCREEN_FIT_STEP    2
+#define PS3_SCREEN_FIT_DEFAULT 90
+extern int ps3_screen_fit;
+#endif
+
 #endif

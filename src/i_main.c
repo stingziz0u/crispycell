@@ -72,6 +72,8 @@ extern void PS3_Log(const char *fmt, ...);
 extern void PS3_LogV(const char *fmt, ...);
 extern boolean PS3_Launcher_SelectIWAD(char *out_path, size_t out_size);
 extern int PS3_Launcher_GetAddons(const char **paths, int max);
+extern int PS3_Launcher_GetDehs(const char **paths, int max);
+extern const char *PS3_Launcher_GetSaveDir(void);
 
 // Fires when the PS button opens the XMB overlay or "Quit Game" is
 // picked from it. Registered below, but only ever delivered when
@@ -146,16 +148,25 @@ static void PS3_DoomThread(void *arg)
     // -iwad <game> [-file <addon>...]. Doom's -file takes any number
     // of filenames after it, so the add-ons the launcher returned all
     // hang off a single -file.
+    //
+    // Mods (1.1) also bring dehacked patches, which go on -deh the same
+    // way, and their own save folder on -savedir.
     #define PS3_MAX_ADDONS 16
+    #define PS3_MAX_DEHS   8
     const char *ps3_addons[PS3_MAX_ADDONS];
+    const char *ps3_dehs[PS3_MAX_DEHS];
     int ps3_num_addons = PS3_Launcher_GetAddons(ps3_addons, PS3_MAX_ADDONS);
+    int ps3_num_dehs = PS3_Launcher_GetDehs(ps3_dehs, PS3_MAX_DEHS);
+    const char *ps3_savedir = PS3_Launcher_GetSaveDir();
     int ps3_argi;
 
     // -noautoload is always on: the launcher decides what loads, and
     // Crispy's own auto-load would otherwise pull SIGIL/NERVE/MASTER
     // LEVELS in behind our back, since every WAD sits in one directory
     // here. See the comment at the top of i_ps3launcher.c.
-    myargc = g_argc + 3 + (ps3_num_addons > 0 ? 1 + ps3_num_addons : 0);
+    myargc = g_argc + 3 + (ps3_num_addons > 0 ? 1 + ps3_num_addons : 0)
+                        + (ps3_num_dehs > 0 ? 1 + ps3_num_dehs : 0)
+                        + (ps3_savedir != NULL ? 2 : 0);
     myargv = malloc(myargc * sizeof(char *));
     assert(myargv != NULL);
 
@@ -179,6 +190,29 @@ static void PS3_DoomThread(void *arg)
         {
             myargv[ps3_argi++] = M_StringDuplicate(ps3_addons[a]);
         }
+    }
+
+    if (ps3_num_dehs > 0)
+    {
+        int a;
+
+        myargv[ps3_argi++] = M_StringDuplicate("-deh");
+
+        for (a = 0; a < ps3_num_dehs; a++)
+        {
+            myargv[ps3_argi++] = M_StringDuplicate(ps3_dehs[a]);
+        }
+    }
+
+    if (ps3_savedir != NULL)
+    {
+        myargv[ps3_argi++] = M_StringDuplicate("-savedir");
+        myargv[ps3_argi++] = M_StringDuplicate(ps3_savedir);
+    }
+
+    for (int i = 0; i < ps3_argi; i++)
+    {
+        PS3_Log("argv[%d] = '%s'", i, myargv[i]);
     }
 
     setlocale(LC_TIME, "");

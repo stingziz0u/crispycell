@@ -242,7 +242,8 @@ int joybspeed = 6;                 // L2
 int joybspeed = 2;
 #endif
 
-#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN)
+#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN) \
+ || defined(PS3_GAME_STRIFE)
 // L1/R1 carry the inventory in these games; the left stick already
 // gives a strafe axis, so the dedicated buttons are not needed.
 int joybstrafeleft = -1;
@@ -255,7 +256,8 @@ int joybstrafeleft = -1;
 int joybstraferight = -1;
 #endif
 
-#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN)
+#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN) \
+ || defined(PS3_GAME_STRIFE)
 int joybjump = 2;                  // circle
 #elif defined(PS3_BUILD)
 int joybjump = 1;                  // square
@@ -285,17 +287,20 @@ int joybautomap = 10;              // select
 int joybautomap = -1;
 #endif
 
-#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN)
+#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN) \
+ || defined(PS3_GAME_STRIFE)
 int joybuseartifact = 1;    // square
 #else
 int joybuseartifact = -1;
 #endif
-#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN)
+#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN) \
+ || defined(PS3_GAME_STRIFE)
 int joybinvleft = 4;        // L1
 #else
 int joybinvleft = -1;
 #endif
-#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN)
+#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN) \
+ || defined(PS3_GAME_STRIFE)
 int joybinvright = 5;       // R1
 #else
 int joybinvright = -1;
@@ -315,6 +320,42 @@ int joybflydown = -1;
 int joybflycenter = 3;      // triangle
 #else
 int joybflycenter = -1;
+#endif
+
+#ifdef PS3_BUILD
+// [PS3] Quicksave / quickload on the pad. Doom keeps the 1.0 layout
+// (triangle / circle); in Heretic and Hexen every button already has a
+// job, so they start unbound and are there for whoever wants them.
+#if defined(PS3_GAME_HERETIC) || defined(PS3_GAME_HEXEN) \
+ || defined(PS3_GAME_STRIFE)
+int joybquicksave = -1;
+int joybquickload = -1;
+#else
+int joybquicksave = 3;      // triangle
+int joybquickload = 2;      // circle
+#endif
+
+// [PS3] Automap zoom. Same buttons as weapon cycling on purpose: while
+// the automap is open g_game.c skips the weapon change for whatever
+// these are bound to, so the d-pad zooms there and switches weapons
+// everywhere else.
+int joybmapzoomin = 12;     // d-pad up
+int joybmapzoomout = 13;    // d-pad down
+
+// [PS3] Strife's own actions, which upstream only has as keys: they are
+// pressed and released as those keys by i_ps3joystick.c, since the
+// objectives and keys pop-ups show only while the key is held.
+#ifdef PS3_GAME_STRIFE
+int joybmission = 3;        // triangle: objectives (hold)
+int joybusehealth = 14;     // d-pad left: use a medkit
+int joybinvkey = 15;        // d-pad right: keys (hold, press again for next page)
+int joybinvdrop = -1;       // drop the selected item (unbound)
+#else
+int joybmission = -1;
+int joybusehealth = -1;
+int joybinvkey = -1;
+int joybinvdrop = -1;
+#endif
 #endif
 
 // Control whether if a mouse button is double clicked, it acts like 
@@ -487,6 +528,13 @@ void M_BindStrifeControls(void)
     M_BindIntVariable("joyb_invright",      &joybinvright);
     // This is technically "invuse" in Strife, but let's reuse the value.
     M_BindIntVariable("joyb_useartifact",   &joybuseartifact);
+
+#ifdef PS3_BUILD
+    M_BindIntVariable("joyb_mission",       &joybmission);
+    M_BindIntVariable("joyb_usehealth",     &joybusehealth);
+    M_BindIntVariable("joyb_invkey",        &joybinvkey);
+    M_BindIntVariable("joyb_invdrop",       &joybinvdrop);
+#endif
 }
 
 void M_BindWeaponControls(void)
@@ -530,6 +578,10 @@ void M_BindMapControls(void)
     M_BindIntVariable("mouseb_mapzoomout",  &mousebmapzoomout); // [crispy]
     M_BindIntVariable("mouseb_mapmaxzoom",  &mousebmapmaxzoom); // [crispy]
     M_BindIntVariable("mouseb_mapfollow",   &mousebmapfollow); // [crispy]
+#ifdef PS3_BUILD
+    M_BindIntVariable("joyb_map_zoomin",    &joybmapzoomin);
+    M_BindIntVariable("joyb_map_zoomout",   &joybmapzoomout);
+#endif
 }
 
 void M_BindMenuControls(void)
@@ -553,6 +605,10 @@ void M_BindMenuControls(void)
     M_BindIntVariable("key_menu_endgame",   &key_menu_endgame);
     M_BindIntVariable("key_menu_messages",  &key_menu_messages);
     M_BindIntVariable("key_menu_qload",     &key_menu_qload);
+#ifdef PS3_BUILD
+    M_BindIntVariable("joyb_quicksave",     &joybquicksave);
+    M_BindIntVariable("joyb_quickload",     &joybquickload);
+#endif
     M_BindIntVariable("key_menu_quit",      &key_menu_quit);
     M_BindIntVariable("key_menu_gamma",     &key_menu_gamma);
 

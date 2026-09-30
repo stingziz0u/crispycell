@@ -20,6 +20,7 @@
 #include <ctype.h>
 
 #include "i_sound.h"
+#include "i_timer.h"
 #include "i_system.h"
 
 #include "deh_str.h"
@@ -672,6 +673,15 @@ void I_StartVoice(const char *lumpname)
 
         // get a channel for the voice
         i_voicehandle = S_GetChannel(NULL, &voice->sfx, true);
+
+#ifdef PS3_BUILD
+        {
+            // [PS3] One line per voice started (verbose builds only).
+            extern void PS3_LogV(const char *fmt, ...);
+            PS3_LogV("I_StartVoice: '%s' channel=%d tic=%d",
+                     lumpnamedup, i_voicehandle, I_GetTime());
+        }
+#endif
 
         channels[i_voicehandle].handle 
             = I_StartSound(&voice->sfx, i_voicehandle, snd_VoiceVolume, NORM_SEP, NORM_PITCH);

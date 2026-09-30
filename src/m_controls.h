@@ -199,6 +199,17 @@ extern int joybflyup;
 extern int joybflydown;
 extern int joybflycenter;
 
+#ifdef PS3_BUILD
+extern int joybquicksave;
+extern int joybquickload;
+extern int joybmapzoomin;
+extern int joybmapzoomout;
+extern int joybmission;
+extern int joybusehealth;
+extern int joybinvkey;
+extern int joybinvdrop;
+#endif
+
 extern int dclick_use;
 
 void M_BindBaseControls(void);

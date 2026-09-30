@@ -34,6 +34,7 @@
 #include "doomtype.h"
 
 extern void PS3_Log(const char *fmt, ...);
+extern void PS3_LogV(const char *fmt, ...);
 
 #define PS3_SFX_CHANNELS  32
 #define PS3_SFX_RATE      48000
@@ -92,8 +93,8 @@ static boolean CacheSFX(sfxinfo_t *sfxinfo)
     unsigned int length;
     unsigned int out_samples;
     unsigned int i;
-    uint32_t step;
-    uint32_t p;
+    uint64_t step;
+    uint64_t p;
     byte *lump;
     byte *data;
     int16_t *out;
@@ -170,6 +171,11 @@ static boolean CacheSFX(sfxinfo_t *sfxinfo)
     // Resample to the port rate with linear interpolation. 16.16 fixed
     // point: floats here would be fine too, but this keeps the whole
     // conversion in integer maths.
+    //
+    // The position is 64-bit on purpose. With 32 bits, 16 are left for
+    // the sample index, so it wrapped to 0 at source sample 65536 --
+    // 5.9 s at 11025 Hz. No Doom sound is that long; every Strife voice
+    // is, and each one started over from the top after ~6 seconds.
     out_samples = (unsigned int)
         (((uint64_t) length * PS3_SFX_RATE) / (unsigned int) samplerate);
 
@@ -184,12 +190,12 @@ static boolean CacheSFX(sfxinfo_t *sfxinfo)
         goto reject;
     }
 
-    step = (uint32_t) (((uint64_t) samplerate << 16) / PS3_SFX_RATE);
+    step = ((uint64_t) samplerate << 16) / PS3_SFX_RATE;
     p = 0;
 
     for (i = 0; i < out_samples; i++)
     {
-        unsigned int idx = p >> 16;
+        unsigned int idx = (unsigned int) (p >> 16);
         int frac = (int) (p & 0xffff);
         int s0, s1;
 
@@ -215,6 +221,15 @@ static boolean CacheSFX(sfxinfo_t *sfxinfo)
     sfx->samples = out;
     sfx->num_samples = out_samples;
     sfxinfo->driver_data = sfx;
+
+    // Anything over a second is a voice or music-like lump (Strife's
+    // VOICES.WAD): log it once, as it is decoded (verbose builds only).
+    if (out_samples > PS3_SFX_RATE)
+    {
+        PS3_LogV("CacheSFX: '%s' %d Hz, %u -> %u samples (%u ms)",
+                sfxinfo->name, samplerate, length, out_samples,
+                out_samples / (PS3_SFX_RATE / 1000));
+    }
 
     W_ReleaseLumpNum(lumpnum);
     return true;

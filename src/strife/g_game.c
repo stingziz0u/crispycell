@@ -1032,6 +1032,16 @@ static void SetJoyButtons(unsigned int buttons_mask)
         {
             // Weapon cycling:
 
+#ifdef PS3_BUILD
+            // [PS3] With the automap open the zoom buttons belong to the
+            // map (am_map.c), so they must not cycle weapons as well.
+            if (automapactive
+             && (i == joybmapzoomin || i == joybmapzoomout))
+            {
+                ;
+            }
+            else
+#endif
             if (i == joybprevweapon)
             {
                 next_weapon = -1;

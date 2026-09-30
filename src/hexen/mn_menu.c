@@ -142,6 +142,12 @@ static void SCMouseInvertY(int option);
 static void SCSfxVolume(int option);
 static void SCMusicVolume(int option);
 static void SCScreenSize(int option);
+#ifdef PS3_BUILD
+static void SCPS3ScreenFit(int option);
+// [PS3] When >= 0, DrawSlider prints this instead of the knob position
+// (TV Screen Fit shows a percentage, not a step).
+static int slider_shown_value = -1;
+#endif
 static boolean SCNetCheck(int option);
 static void CrispyHires(int option);
 static void CrispyToggleWidescreen(int option);
@@ -393,13 +399,21 @@ static MenuItem_t Options2Items[] = {
     {ITT_LRFUNC, "SFX VOLUME", SCSfxVolume, 0, MENU_NONE},
     {ITT_EMPTY, NULL, NULL, 0, MENU_NONE},
     {ITT_LRFUNC, "MUSIC VOLUME", SCMusicVolume, 0, MENU_NONE},
+    {ITT_EMPTY, NULL, NULL, 0, MENU_NONE},
+#ifdef PS3_BUILD
+    {ITT_LRFUNC, "TV SCREEN FIT", SCPS3ScreenFit, 0, MENU_NONE},
     {ITT_EMPTY, NULL, NULL, 0, MENU_NONE}
+#endif
 };
 
 static Menu_t Options2Menu = {
     90, 20,
     DrawOptions2Menu,
+#ifdef PS3_BUILD
+    8, Options2Items,
+#else
     6, Options2Items,
+#endif
     0,
     MENU_OPTIONS
 };
@@ -1341,6 +1355,13 @@ static void DrawOptions2Menu(void)
     DrawSlider(&Options2Menu, 1, 14, screenblocks - 3);
     DrawSlider(&Options2Menu, 3, 16, snd_MaxVolume);
     DrawSlider(&Options2Menu, 5, 16, snd_MusicVolume);
+#ifdef PS3_BUILD
+    slider_shown_value = ps3_screen_fit;
+    DrawSlider(&Options2Menu, 7,
+               (PS3_SCREEN_FIT_MAX - PS3_SCREEN_FIT_MIN) / PS3_SCREEN_FIT_STEP + 1,
+               (ps3_screen_fit - PS3_SCREEN_FIT_MIN) / PS3_SCREEN_FIT_STEP);
+    slider_shown_value = -1;
+#endif
 }
 
 //---------------------------------------------------------------------------
@@ -1854,6 +1875,27 @@ static void SCMusicVolume(int option)
 //
 //---------------------------------------------------------------------------
 
+#ifdef PS3_BUILD
+static void SCPS3ScreenFit(int option)
+{
+    if (option == RIGHT_DIR)
+    {
+        if (ps3_screen_fit < PS3_SCREEN_FIT_MAX)
+        {
+            ps3_screen_fit += PS3_SCREEN_FIT_STEP;
+        }
+    }
+    else if (ps3_screen_fit > PS3_SCREEN_FIT_MIN)
+    {
+        ps3_screen_fit -= PS3_SCREEN_FIT_STEP;
+    }
+
+    // An odd value typed into the cfg would never land on a step.
+    ps3_screen_fit = BETWEEN(PS3_SCREEN_FIT_MIN, PS3_SCREEN_FIT_MAX,
+                             ps3_screen_fit);
+}
+#endif
+
 static void SCScreenSize(int option)
 {
     if (option == RIGHT_DIR)
@@ -2332,6 +2374,24 @@ boolean MN_Responder(event_t * event)
             return true;
         }
 
+#ifdef PS3_BUILD
+        // [PS3] Quicksave / quickload from the pad (joyb_quicksave and
+        // joyb_quickload in the cfg; unbound by default in this game,
+        // since every button already has a job). Only with the menu and
+        // any Y/N prompt closed, so the buttons keep their menu meaning.
+        if (!MenuActive && !askforquit)
+        {
+            if (JOY_BUTTON_PRESSED(joybquicksave))
+            {
+                key = key_menu_qsave;
+            }
+            else if (JOY_BUTTON_PRESSED(joybquickload))
+            {
+                key = key_menu_qload;
+            }
+        }
+
+#endif
 #ifdef PS3_BUILD
         // Outside the MenuActive guard on purpose: the state has to keep
         // tracking while the menu is closed, or the first press after
@@ -3242,7 +3302,12 @@ static void DrawSlider(Menu_t * menu, int item, int width, int slot)
     V_DrawPatch(x2, y, W_CacheLumpName("M_SLDRT", PU_CACHE));
 
     // [crispy] print the value
+#ifdef PS3_BUILD
+    M_snprintf(num, 4, "%3d",
+               slider_shown_value >= 0 ? slider_shown_value : slot);
+#else
     M_snprintf(num, 4, "%3d", slot);
+#endif
     MN_DrTextA(num, x2 + 32, y + 3);
 
     // [crispy] do not crash anymore if the value is out of bounds
