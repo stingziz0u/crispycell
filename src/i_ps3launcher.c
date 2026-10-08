@@ -531,9 +531,16 @@ static const struct { const char *file; const char *label; } known_names[] =
     { "CHEX3.WAD",         "Chex Quest 3" },
     { "HACX.WAD",          "HacX" },
     { "SIGIL.WAD",         "SIGIL" },
+    { "SIGIL_V1_2.WAD",    "SIGIL" },
     { "SIGIL_V1_21.WAD",   "SIGIL" },
+    { "SIGIL_V1_23.WAD",   "SIGIL" },
+    { "SIGIL_V1_23_REG.WAD", "SIGIL" },
     { "SIGIL2.WAD",        "SIGIL II" },
     { "SIGIL_II_V1_0.WAD", "SIGIL II" },
+    // the MP3 edition of SIGIL II is a whole WAD (maps and music), not a
+    // soundtrack for the other one
+    { "SIGIL_II_MP3_V1_0.WAD", "SIGIL II (MP3)" },
+    { "SIGIL_II_MP3.WAD",  "SIGIL II (MP3)" },
     { "NERVE.WAD",         "No Rest for the Living" },
     { "MASTERLEVELS.WAD",  "Master Levels" },
     { NULL, NULL }
@@ -547,7 +554,10 @@ static const struct { const char *file; const char *label; } known_names[] =
 static const struct { const char *with; const char *music; } companions[] =
 {
     { "SIGIL.WAD",         "SIGIL_SHREDS.WAD" },
+    { "SIGIL_V1_2.WAD",    "SIGIL_SHREDS.WAD" },
     { "SIGIL_V1_21.WAD",   "SIGIL_SHREDS.WAD" },
+    { "SIGIL_V1_23.WAD",   "SIGIL_SHREDS.WAD" },
+    { "SIGIL_V1_23_REG.WAD", "SIGIL_SHREDS.WAD" },
     { "SIGIL2.WAD",        "SIGIL_II_MP3.WAD" },
     { "SIGIL_II_V1_0.WAD", "SIGIL_II_MP3.WAD" },
     { NULL, NULL }
@@ -630,6 +640,38 @@ static wad_info_t *FindByName(const char *filename)
     return NULL;
 }
 
+// A companion with maps of its own and none of its partners installed is
+// a game after all: SIGIL_II_MP3.WAD is sometimes the whole MP3 edition
+// of SIGIL II (SIGIL_II_MP3_V1_0.WAD renamed), not just its soundtrack.
+// Without SIGIL2.WAD next to it, it gets an entry instead of vanishing.
+static boolean HiddenCompanion(const wad_info_t *w)
+{
+    const char *filename = w->file;
+    int i;
+
+    if (!IsCompanion(filename))
+    {
+        return false;
+    }
+
+    if (w->family == FAMILY_UNKNOWN)
+    {
+        return true;    // a soundtrack alone: nothing to play
+    }
+
+    for (i = 0; companions[i].with != NULL; i++)
+    {
+        if (companions[i].music != NULL
+         && strcasecmp(filename, companions[i].music) == 0
+         && FindByName(companions[i].with) != NULL)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static void ScanDir(const char *dir)
 {
     DIR *d;
@@ -687,9 +729,14 @@ static const struct { const char *pwad; const char *iwad; } required_base[] =
     { "CHEX2.WAD",         "CHEX.WAD" },
     { "CHEX3.WAD",         "CHEX.WAD" },
     { "SIGIL.WAD",         "DOOM.WAD" },
+    { "SIGIL_V1_2.WAD",    "DOOM.WAD" },
     { "SIGIL_V1_21.WAD",   "DOOM.WAD" },
+    { "SIGIL_V1_23.WAD",   "DOOM.WAD" },
+    { "SIGIL_V1_23_REG.WAD", "DOOM.WAD" },
     { "SIGIL2.WAD",        "DOOM.WAD" },
     { "SIGIL_II_V1_0.WAD", "DOOM.WAD" },
+    { "SIGIL_II_MP3_V1_0.WAD", "DOOM.WAD" },
+    { "SIGIL_II_MP3.WAD",  "DOOM.WAD" },
     { "NERVE.WAD",         "DOOM2.WAD" },
     { "MASTERLEVELS.WAD",  "DOOM2.WAD" },
     { NULL, NULL }
@@ -798,7 +845,7 @@ static void BuildEntries(void)
         const char *required;
         game_entry_t *g;
 
-        if (found[i].is_iwad || IsCompanion(found[i].file))
+        if (found[i].is_iwad || HiddenCompanion(&found[i]))
         {
             continue;
         }
@@ -1711,6 +1758,14 @@ boolean PS3_Launcher_SelectIWAD(char *out_path, size_t out_size)
     PS3_Log("Launcher: chose '%s' (iwad %s, %d add-on files, %d patches)",
             entries[chosen_entry].label, entries[chosen_entry].iwad,
             entries[chosen_entry].num_files, entries[chosen_entry].num_dehs);
+    {
+        int f;
+
+        for (f = 0; f < entries[chosen_entry].num_files; f++)
+        {
+            PS3_Log("Launcher:   -file %s", entries[chosen_entry].files[f]);
+        }
+    }
 
     MakeSaveDir(&entries[chosen_entry]);
     M_StringCopy(out_path, entries[chosen_entry].iwad, out_size);

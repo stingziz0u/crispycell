@@ -125,6 +125,8 @@ static int          mp3_pcm_ch;     // 1 or 2
 static unsigned int mp3_step;       // source frames per output frame, 16.16
 static unsigned int mp3_frac;       // position between mp3_a and mp3_b, 16.16
 static float        mp3_a[2], mp3_b[2];
+static unsigned int mp3_out_frames; // mixed since the start, for the log
+static boolean      mp3_ended;      // ran out of frames (not looping)
 
 static void Lock(void)
 {
@@ -315,6 +317,27 @@ static void Mp3Stop(void)
     mp3_cur = NULL;
 }
 
+// What the last MP3 song did, for the log (game thread).
+static void Mp3LogPlayed(void)
+{
+    unsigned int frames;
+    boolean ended;
+
+    Lock();
+    frames = mp3_out_frames;
+    ended = mp3_ended;
+    mp3_out_frames = 0;
+    mp3_ended = false;
+    Unlock();
+
+    if (frames > 0 || ended)
+    {
+        PS3_Log("[music] MP3 played %u.%u s%s", frames / SF2_RATE,
+                (frames % SF2_RATE) * 10 / SF2_RATE,
+                ended ? ", to the end" : "");
+    }
+}
+
 // Starts a song from the top (under the lock).
 static void Mp3Start(mp3_song_t *song, boolean looping)
 {
@@ -324,6 +347,8 @@ static void Mp3Start(mp3_song_t *song, boolean looping)
     mp3_pos = song->start;
     mp3_pcm_frames = mp3_pcm_next = 0;
     mp3_frac = 0;
+    mp3_out_frames = 0;
+    mp3_ended = false;
     song_paused = false;
 
     if (!Mp3Pull(mp3_a) || !Mp3Pull(mp3_b))
@@ -354,9 +379,11 @@ static void Mp3MixInto(float *dst, unsigned int frames)
             if (!Mp3Pull(mp3_b))
             {
                 mp3_cur = NULL;     // the end, not looping
+                mp3_ended = true;
             }
         }
     }
+    mp3_out_frames += i;
 }
 
 // The size of the ID3v2 tag at the start, 0 if there is none. Skipping
@@ -381,12 +408,13 @@ static int Id3Size(const byte *data, int len)
     return size < len ? size : 0;
 }
 
-// An MP3 file: an ID3v2 tag or an MPEG audio layer III frame header,
-// and minimp3 finds a frame it can decode in it.
-static boolean IsMp3(const byte *data, int len)
+// An MP3 file: minimp3 finds a run of layer III frames in it, after the
+// ID3v2 tag if there is one. Not only at the very start: some files have
+// padding or a stray tag before the first frame. MIDI and MUS never get
+// here (PS3Music_RegisterSong checks those first).
+static boolean IsMp3(const byte *data, int len, mp3dec_frame_info_t *info)
 {
     static mp3dec_t probe;      // game thread only
-    mp3dec_frame_info_t info;
     int start, n;
 
     if (len < 4)
@@ -395,15 +423,11 @@ static boolean IsMp3(const byte *data, int len)
     }
 
     start = Id3Size(data, len);
-    if (start == 0 && !(data[0] == 0xff && (data[1] & 0xe6) == 0xe2))
-    {
-        return false;
-    }
 
     mp3dec_init(&probe);
-    n = mp3dec_decode_frame(&probe, data + start, len - start, NULL, &info);
+    n = mp3dec_decode_frame(&probe, data + start, len - start, NULL, info);
 
-    return n > 0 && info.hz > 0;
+    return n > 0 && info->hz > 0 && info->layer == 3;
 }
 
 static mp3_song_t *FindMp3(void *handle)
@@ -456,7 +480,6 @@ static void *RegisterMp3(const void *data, int len)
         return NULL;
     }
 
-    PS3_Log("[music] MP3 song, %d KB", len / 1024);
     return song;
 }
 
@@ -796,13 +819,29 @@ static void PS3Music_ResumeSong(void)
 
 static void *PS3Music_RegisterSong(void *data, int len)
 {
+    const byte *b = data;
     void *handle;
     tml_message *midi;
     int i;
 
-    if (IsMp3(data, len))
+    if (len >= 4 && memcmp(data, "MThd", 4) != 0 && memcmp(data, "MUS\x1a", 4) != 0)
     {
-        return RegisterMp3(data, len);
+        mp3dec_frame_info_t info;
+
+        if (IsMp3(data, len, &info))
+        {
+            PS3_Log("[music] MP3 song, %d KB, %d Hz, %s, %d kbps",
+                    len / 1024, info.hz, info.channels > 1 ? "stereo" : "mono",
+                    info.bitrate_kbps);
+            return RegisterMp3(data, len);
+        }
+
+        PS3_Log("[music] song of %d KB in an unknown format "
+                "(%02x %02x %02x %02x %02x %02x %02x %02x): no music",
+                len / 1024, b[0], b[1], b[2], b[3],
+                len > 4 ? b[4] : 0, len > 5 ? b[5] : 0,
+                len > 6 ? b[6] : 0, len > 7 ? b[7] : 0);
+        return NULL;
     }
 
     handle = music_opl_module.RegisterSong(data, len);
@@ -857,6 +896,7 @@ static void PS3Music_UnRegisterSong(void *handle)
     if (mp3 != NULL)
     {
         // ours alone: the OPL module never saw it
+        Mp3LogPlayed();
         FreeMp3(mp3);
         return;
     }
@@ -892,7 +932,7 @@ static void PS3Music_UnRegisterSong(void *handle)
 
 static void PS3Music_PlaySong(void *handle, boolean looping)
 {
-    boolean soundfont;
+    boolean soundfont, mp3_ok = false;
     mp3_song_t *mp3;
 
     Lock();
@@ -906,10 +946,7 @@ static void PS3Music_PlaySong(void *handle, boolean looping)
         // whatever the Music setting: neither synth plays this one
         StopSoundFontSong();
         Mp3Start(mp3, looping);
-        if (mp3_cur == NULL)
-        {
-            PS3_Log("[music] the MP3 song has no frame to play");
-        }
+        mp3_ok = (mp3_cur != NULL);
         soundfont = false;
     }
     else
@@ -925,6 +962,15 @@ static void PS3Music_PlaySong(void *handle, boolean looping)
     if (mp3 != NULL)
     {
         music_opl_module.StopSong();
+        if (mp3_ok)
+        {
+            PS3_Log("[music] MP3 playing%s, music volume %d/127",
+                    looping ? " (loop)" : "", music_volume);
+        }
+        else
+        {
+            PS3_Log("[music] the MP3 song has no frame to play");
+        }
     }
     else if (!soundfont)
     {

@@ -115,7 +115,10 @@ CHEX2.WAD         Chex Quest 2    (needs CHEX.WAD)
 `SIGIL_SHREDS.WAD` and `SIGIL_II_MP3.WAD` are not listed separately — they
 are soundtrack replacements and load automatically alongside their episode
 when present. Their music is MP3 and always plays as recorded, whatever the
-Music setting (see [Music](#music)).
+Music setting (see [Music](#music)). The MP3 edition of SIGIL II
+(`SIGIL_II_MP3_V1_0.WAD`) is a complete WAD of its own and is listed as
+"SIGIL II (MP3)"; so is a `SIGIL_II_MP3.WAD` that holds maps when there is
+no `SIGIL2.WAD` beside it.
 
 Some releases ship `NERVE.WAD` and `MASTERLEVELS.WAD` marked as IWADs
 rather than PWADs (the BFG and Unity re-releases do). Those show up as
