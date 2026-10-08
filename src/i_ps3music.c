@@ -25,13 +25,15 @@
 // thread; the synth pointer is swapped under that mutex. TinySoundFont
 // keeps the samples as floats: about twice the file's size in memory.
 //
-// MP3 music lumps (SIGIL_SHREDS.WAD, SIGIL_II_MP3.WAD) are not MIDI: the
-// OPL module and the SoundFont can't play them, and upstream needs
+// Music lumps that are recordings -- MP3 or Ogg Vorbis, as in
+// SIGIL_SHREDS.WAD (Ogg) and the MP3 edition of SIGIL II -- are not MIDI:
+// neither the OPL nor the SoundFont can play them, and upstream needs
 // SDL_mixer for them. They play here as recorded, whatever the Music
 // setting says -- a soundtrack WAD is there to be heard. minimp3.h (CC0,
-// as in re3-PS3) decodes them a frame at a time in the audio thread,
-// straight from a copy of the lump, and the samples are resampled to the
-// port's 48 kHz with linear interpolation.
+// as in re3-PS3) and stb_vorbis.c (public domain) decode them a frame at
+// a time in the audio thread, straight from a copy of the lump, into
+// floats that are resampled to the port's 48 kHz with linear
+// interpolation.
 //
 
 #include "config.h"
@@ -61,6 +63,16 @@
 #define MINIMP3_NO_SIMD
 #define MINIMP3_ONLY_MP3
 #include "minimp3.h"
+
+// floats out, so none of its integer conversion (the fast one depends on
+// the byte order); memory from a buffer of ours, so no alloca in the
+// audio thread
+#define STB_VORBIS_NO_STDIO
+#define STB_VORBIS_NO_PUSHDATA_API
+#define STB_VORBIS_NO_INTEGER_CONVERSION
+#define get_bits stbv_get_bits      // minimp3 has a static one too
+#include "stb_vorbis.c"
+#undef get_bits
 
 extern void PS3_Log(const char *fmt, ...);
 
@@ -103,30 +115,34 @@ static boolean current_looping;
 static boolean current_on;
 static int     music_volume = 127;
 
-// A registered MP3 song: its handle is this struct.
+// A registered recorded song (MP3 or Ogg): its handle is this struct.
 typedef struct
 {
-    byte *data;         // our copy: Hexen releases the lump right away
-    int   len;
-    int   start;        // the first frame, after an ID3v2 tag
-} mp3_song_t;
+    byte       *data;       // our copy: Hexen releases the lump right away
+    int         len;
+    boolean     ogg;
+    int         start;      // MP3: the first frame, after an ID3v2 tag
+    stb_vorbis *vorbis;     // Ogg: its decoder (made when registered)
+    void       *vorbis_mem; // and all the memory it uses
+} track_t;
 
-static mp3_song_t *mp3_songs[MAX_SONGS];
+static track_t *tracks[MAX_SONGS];
 
-// MP3 playback, audio thread (under sf2_mutex like the rest).
-static mp3_song_t  *mp3_cur;        // NULL = no MP3 playing
-static boolean      mp3_looping;
-static mp3dec_t     mp3_dec;
-static int          mp3_pos;        // byte offset of the next frame
+// Recorded playback, audio thread (under sf2_mutex like the rest).
+static track_t      *trk_cur;       // NULL = no recorded song playing
+static boolean       trk_looping;
+static mp3dec_t      mp3_dec;
+static int           mp3_pos;       // byte offset of the next MP3 frame
 static mp3d_sample_t mp3_pcm[MINIMP3_MAX_SAMPLES_PER_FRAME];
-static int          mp3_pcm_frames; // decoded frames in mp3_pcm
-static int          mp3_pcm_next;   // next one to use
-static int          mp3_pcm_ch;     // 1 or 2
-static unsigned int mp3_step;       // source frames per output frame, 16.16
-static unsigned int mp3_frac;       // position between mp3_a and mp3_b, 16.16
-static float        mp3_a[2], mp3_b[2];
-static unsigned int mp3_out_frames; // mixed since the start, for the log
-static boolean      mp3_ended;      // ran out of frames (not looping)
+#define TRK_BUF_FRAMES 4096         // a Vorbis frame is up to 4096 samples
+static float         trk_buf[TRK_BUF_FRAMES * 2]; // decoded, stereo
+static int           trk_frames;    // decoded frames in trk_buf
+static int           trk_next;      // next one to use
+static unsigned int  trk_step;      // source frames per output frame, 16.16
+static unsigned int  trk_frac;      // position between trk_a and trk_b, 16.16
+static float         trk_a[2], trk_b[2];
+static unsigned int  trk_out_frames; // mixed since the start, for the log
+static boolean       trk_ended;     // ran out of frames (not looping)
 
 static void Lock(void)
 {
@@ -247,143 +263,201 @@ static tsf *LoadSoundFont(const char *name)
 }
 
 // ---------------------------------------------------------------------
-// The MP3 player (audio thread; started from the game thread)
+// The recorded music player (audio thread; started from the game thread)
 // ---------------------------------------------------------------------
+
+static void SetRate(int hz)
+{
+    trk_step = (unsigned int) (((uint64_t) hz << 16) / SF2_RATE);
+}
+
+// Decodes the next frame of the current song into trk_buf. Returns the
+// frames decoded, 0 for nothing this time (an ID3 tag or junk skipped),
+// -1 at the end of the song.
+static int DecodeFrame(void)
+{
+    int n, i;
+
+    if (trk_cur->ogg)
+    {
+        float **out;
+        int ch;
+
+        n = stb_vorbis_get_frame_float(trk_cur->vorbis, &ch, &out);
+        if (n <= 0)
+        {
+            return -1;
+        }
+        if (n > TRK_BUF_FRAMES)
+        {
+            n = TRK_BUF_FRAMES;
+        }
+        for (i = 0; i < n; i++)
+        {
+            trk_buf[i * 2] = out[0][i];
+            trk_buf[i * 2 + 1] = out[ch > 1 ? 1 : 0][i];
+        }
+        return n;
+    }
+    else
+    {
+        mp3dec_frame_info_t info;
+
+        if (mp3_pos >= trk_cur->len)
+        {
+            return -1;
+        }
+        n = mp3dec_decode_frame(&mp3_dec, trk_cur->data + mp3_pos,
+                                trk_cur->len - mp3_pos, mp3_pcm, &info);
+        if (info.frame_bytes == 0)
+        {
+            return -1;      // nothing more in the lump
+        }
+        mp3_pos += info.frame_bytes;
+        if (n <= 0 || info.hz <= 0)
+        {
+            return 0;
+        }
+        SetRate(info.hz);
+        for (i = 0; i < n; i++)
+        {
+            if (info.channels > 1)
+            {
+                trk_buf[i * 2] = mp3_pcm[i * 2] * (1.0f / 32768.0f);
+                trk_buf[i * 2 + 1] = mp3_pcm[i * 2 + 1] * (1.0f / 32768.0f);
+            }
+            else
+            {
+                trk_buf[i * 2] = trk_buf[i * 2 + 1] = mp3_pcm[i] * (1.0f / 32768.0f);
+            }
+        }
+        return n;
+    }
+}
+
+// Back to the first frame.
+static void Rewind(void)
+{
+    if (trk_cur->ogg)
+    {
+        stb_vorbis_seek_start(trk_cur->vorbis);
+    }
+    else
+    {
+        mp3dec_init(&mp3_dec);
+        mp3_pos = trk_cur->start;
+    }
+    trk_frames = trk_next = 0;
+}
 
 // The next source frame into out[], decoding when the last one is used
 // up. At the end of the song it starts over if looping -- once per call
 // at most, so a lump with no playable frame can't loop for ever under
 // the lock -- and returns false otherwise.
-static boolean Mp3Pull(float out[2])
+static boolean TrackPull(float out[2])
 {
     boolean restarted = false;
 
-    while (mp3_pcm_next >= mp3_pcm_frames)
+    while (trk_next >= trk_frames)
     {
-        mp3dec_frame_info_t info;
-        int n = 0;
+        int n = DecodeFrame();
 
-        if (mp3_pos < mp3_cur->len)
+        if (n < 0)
         {
-            n = mp3dec_decode_frame(&mp3_dec, mp3_cur->data + mp3_pos,
-                                    mp3_cur->len - mp3_pos, mp3_pcm, &info);
-        }
-        else
-        {
-            info.frame_bytes = 0;
-        }
-
-        if (info.frame_bytes == 0)
-        {
-            // nothing more in the lump
-            if (!mp3_looping || restarted)
+            if (!trk_looping || restarted)
             {
                 return false;
             }
-            mp3dec_init(&mp3_dec);
-            mp3_pos = mp3_cur->start;
+            Rewind();
             restarted = true;
             continue;
         }
 
-        mp3_pos += info.frame_bytes;
-
-        if (n > 0 && info.hz > 0)
-        {
-            // 0 samples = an ID3 tag or junk skipped: try the next frame
-            mp3_pcm_frames = n;
-            mp3_pcm_next = 0;
-            mp3_pcm_ch = info.channels > 1 ? 2 : 1;
-            mp3_step = (unsigned int) (((uint64_t) info.hz << 16) / SF2_RATE);
-        }
+        trk_frames = n;
+        trk_next = 0;
     }
 
-    if (mp3_pcm_ch == 2)
-    {
-        out[0] = mp3_pcm[mp3_pcm_next * 2] * (1.0f / 32768.0f);
-        out[1] = mp3_pcm[mp3_pcm_next * 2 + 1] * (1.0f / 32768.0f);
-    }
-    else
-    {
-        out[0] = out[1] = mp3_pcm[mp3_pcm_next] * (1.0f / 32768.0f);
-    }
-    mp3_pcm_next++;
+    out[0] = trk_buf[trk_next * 2];
+    out[1] = trk_buf[trk_next * 2 + 1];
+    trk_next++;
 
     return true;
 }
 
-static void Mp3Stop(void)
+static void TrackStop(void)
 {
-    mp3_cur = NULL;
+    trk_cur = NULL;
 }
 
-// What the last MP3 song did, for the log (game thread).
-static void Mp3LogPlayed(void)
+// What the last recorded song did, for the log (game thread).
+static void TrackLogPlayed(void)
 {
     unsigned int frames;
     boolean ended;
 
     Lock();
-    frames = mp3_out_frames;
-    ended = mp3_ended;
-    mp3_out_frames = 0;
-    mp3_ended = false;
+    frames = trk_out_frames;
+    ended = trk_ended;
+    trk_out_frames = 0;
+    trk_ended = false;
     Unlock();
 
     if (frames > 0 || ended)
     {
-        PS3_Log("[music] MP3 played %u.%u s%s", frames / SF2_RATE,
+        PS3_Log("[music] played %u.%u s%s", frames / SF2_RATE,
                 (frames % SF2_RATE) * 10 / SF2_RATE,
                 ended ? ", to the end" : "");
     }
 }
 
 // Starts a song from the top (under the lock).
-static void Mp3Start(mp3_song_t *song, boolean looping)
+static void TrackStart(track_t *song, boolean looping)
 {
-    mp3_cur = song;
-    mp3_looping = looping;
-    mp3dec_init(&mp3_dec);
-    mp3_pos = song->start;
-    mp3_pcm_frames = mp3_pcm_next = 0;
-    mp3_frac = 0;
-    mp3_out_frames = 0;
-    mp3_ended = false;
+    trk_cur = song;
+    trk_looping = looping;
+    if (song->ogg)
+    {
+        SetRate(stb_vorbis_get_info(song->vorbis).sample_rate);
+    }
+    Rewind();
+    trk_frac = 0;
+    trk_out_frames = 0;
+    trk_ended = false;
     song_paused = false;
 
-    if (!Mp3Pull(mp3_a) || !Mp3Pull(mp3_b))
+    if (!TrackPull(trk_a) || !TrackPull(trk_b))
     {
-        mp3_cur = NULL;
+        trk_cur = NULL;
     }
 }
 
-// Adds the MP3 to the block (under the lock).
-static void Mp3MixInto(float *dst, unsigned int frames)
+// Adds the song to the block (under the lock).
+static void TrackMixInto(float *dst, unsigned int frames)
 {
     const float gain = music_volume / 127.0f;
     unsigned int i;
 
-    for (i = 0; i < frames && mp3_cur != NULL; i++)
+    for (i = 0; i < frames && trk_cur != NULL; i++)
     {
-        float t = mp3_frac * (1.0f / 65536.0f);
+        float t = trk_frac * (1.0f / 65536.0f);
 
-        dst[i * 2]     += (mp3_a[0] + (mp3_b[0] - mp3_a[0]) * t) * gain;
-        dst[i * 2 + 1] += (mp3_a[1] + (mp3_b[1] - mp3_a[1]) * t) * gain;
+        dst[i * 2]     += (trk_a[0] + (trk_b[0] - trk_a[0]) * t) * gain;
+        dst[i * 2 + 1] += (trk_a[1] + (trk_b[1] - trk_a[1]) * t) * gain;
 
-        mp3_frac += mp3_step;
-        while (mp3_frac >= 0x10000 && mp3_cur != NULL)
+        trk_frac += trk_step;
+        while (trk_frac >= 0x10000 && trk_cur != NULL)
         {
-            mp3_frac -= 0x10000;
-            mp3_a[0] = mp3_b[0];
-            mp3_a[1] = mp3_b[1];
-            if (!Mp3Pull(mp3_b))
+            trk_frac -= 0x10000;
+            trk_a[0] = trk_b[0];
+            trk_a[1] = trk_b[1];
+            if (!TrackPull(trk_b))
             {
-                mp3_cur = NULL;     // the end, not looping
-                mp3_ended = true;
+                trk_cur = NULL;     // the end, not looping
+                trk_ended = true;
             }
         }
     }
-    mp3_out_frames += i;
+    trk_out_frames += i;
 }
 
 // The size of the ID3v2 tag at the start, 0 if there is none. Skipping
@@ -430,43 +504,116 @@ static boolean IsMp3(const byte *data, int len, mp3dec_frame_info_t *info)
     return n > 0 && info->hz > 0 && info->layer == 3;
 }
 
-static mp3_song_t *FindMp3(void *handle)
+static track_t *FindTrack(void *handle)
 {
     int i;
 
     for (i = 0; i < MAX_SONGS && handle != NULL; i++)
     {
-        if (mp3_songs[i] == handle)
+        if (tracks[i] == handle)
         {
-            return mp3_songs[i];
+            return tracks[i];
         }
     }
 
     return NULL;
 }
 
-static void *RegisterMp3(const void *data, int len)
+static void FreeTrackData(track_t *song)
 {
-    mp3_song_t *song;
+    if (song->vorbis != NULL)
+    {
+        stb_vorbis_close(song->vorbis);
+    }
+    free(song->vorbis_mem);
+    free(song->data);
+    free(song);
+}
+
+// Opens the Ogg Vorbis decoder of a song, in memory of its own: 256 KB
+// first, more if the stream needs it (big codebooks).
+static boolean OpenVorbis(track_t *song)
+{
+    int size, error = 0;
+
+    for (size = 256 * 1024; size <= 4 * 1024 * 1024; size *= 2)
+    {
+        stb_vorbis_alloc alloc;
+
+        song->vorbis_mem = malloc(size);
+        if (song->vorbis_mem == NULL)
+        {
+            return false;
+        }
+        alloc.alloc_buffer = song->vorbis_mem;
+        alloc.alloc_buffer_length_in_bytes = size;
+
+        song->vorbis = stb_vorbis_open_memory(song->data, song->len,
+                                              &error, &alloc);
+        if (song->vorbis != NULL)
+        {
+            return true;
+        }
+
+        free(song->vorbis_mem);
+        song->vorbis_mem = NULL;
+
+        if (error != VORBIS_outofmem)
+        {
+            break;
+        }
+    }
+
+    PS3_Log("[music] Ogg song: not Vorbis or damaged (stb_vorbis error %d)",
+            error);
+    return false;
+}
+
+static void *RegisterTrack(const void *data, int len, boolean ogg)
+{
+    track_t *song;
     int i;
 
-    song = malloc(sizeof(*song));
+    song = calloc(1, sizeof(*song));
     if (song == NULL || (song->data = malloc(len)) == NULL)
     {
-        PS3_Log("[music] out of memory for a %d KB MP3", len / 1024);
+        PS3_Log("[music] out of memory for a %d KB song", len / 1024);
         free(song);
         return NULL;
     }
     memcpy(song->data, data, len);
     song->len = len;
-    song->start = Id3Size(song->data, len);
+    song->ogg = ogg;
+
+    if (ogg)
+    {
+        stb_vorbis_info info;
+
+        if (!OpenVorbis(song))
+        {
+            FreeTrackData(song);
+            return NULL;
+        }
+        info = stb_vorbis_get_info(song->vorbis);
+        PS3_Log("[music] Ogg Vorbis song, %d KB, %u Hz, %d channel(s)",
+                len / 1024, info.sample_rate, info.channels);
+        if (info.sample_rate == 0 || info.channels < 1)
+        {
+            FreeTrackData(song);
+            return NULL;
+        }
+    }
+    else
+    {
+        song->start = Id3Size(song->data, len);
+    }
 
     Lock();
     for (i = 0; i < MAX_SONGS; i++)
     {
-        if (mp3_songs[i] == NULL)
+        if (tracks[i] == NULL)
         {
-            mp3_songs[i] = song;
+            tracks[i] = song;
             break;
         }
     }
@@ -475,34 +622,32 @@ static void *RegisterMp3(const void *data, int len)
     if (i == MAX_SONGS)
     {
         // no free slot (can't happen: one song at a time)
-        free(song->data);
-        free(song);
+        FreeTrackData(song);
         return NULL;
     }
 
     return song;
 }
 
-static void FreeMp3(mp3_song_t *song)
+static void FreeTrack(track_t *song)
 {
     int i;
 
     Lock();
-    if (mp3_cur == song)
+    if (trk_cur == song)
     {
-        Mp3Stop();
+        TrackStop();
     }
     for (i = 0; i < MAX_SONGS; i++)
     {
-        if (mp3_songs[i] == song)
+        if (tracks[i] == song)
         {
-            mp3_songs[i] = NULL;
+            tracks[i] = NULL;
         }
     }
     Unlock();
 
-    free(song->data);
-    free(song);
+    FreeTrackData(song);
 }
 
 // ---------------------------------------------------------------------
@@ -575,12 +720,12 @@ void PS3Music_MixInto(float *dst, unsigned int frames, int ch)
 
     sysMutexLock(sf2_mutex, 0);
 
-    if (mp3_cur != NULL)
+    if (trk_cur != NULL)
     {
-        // an MP3 song plays instead of either synth
+        // a recorded song plays instead of either synth
         if (!song_paused)
         {
-            Mp3MixInto(dst, frames);
+            TrackMixInto(dst, frames);
         }
         sysMutexUnlock(sf2_mutex);
         return;
@@ -768,14 +913,13 @@ static void PS3Music_Shutdown(void)
 
     song_first = song_pos = NULL;
 
-    mp3_cur = NULL;
+    trk_cur = NULL;
     for (i = 0; i < MAX_SONGS; i++)
     {
-        if (mp3_songs[i] != NULL)
+        if (tracks[i] != NULL)
         {
-            free(mp3_songs[i]->data);
-            free(mp3_songs[i]);
-            mp3_songs[i] = NULL;
+            FreeTrackData(tracks[i]);
+            tracks[i] = NULL;
         }
     }
 
@@ -828,12 +972,17 @@ static void *PS3Music_RegisterSong(void *data, int len)
     {
         mp3dec_frame_info_t info;
 
+        if (memcmp(data, "OggS", 4) == 0)
+        {
+            return RegisterTrack(data, len, true);
+        }
+
         if (IsMp3(data, len, &info))
         {
             PS3_Log("[music] MP3 song, %d KB, %d Hz, %s, %d kbps",
                     len / 1024, info.hz, info.channels > 1 ? "stereo" : "mono",
                     info.bitrate_kbps);
-            return RegisterMp3(data, len);
+            return RegisterTrack(data, len, false);
         }
 
         PS3_Log("[music] song of %d KB in an unknown format "
@@ -881,23 +1030,23 @@ static void *PS3Music_RegisterSong(void *data, int len)
 static void PS3Music_UnRegisterSong(void *handle)
 {
     tml_message *midi = NULL;
-    mp3_song_t *mp3;
+    track_t *trk;
     int i;
 
     Lock();
-    mp3 = FindMp3(handle);
-    if (mp3 != NULL && handle == current_handle)
+    trk = FindTrack(handle);
+    if (trk != NULL && handle == current_handle)
     {
         current_on = false;
         current_handle = NULL;
     }
     Unlock();
 
-    if (mp3 != NULL)
+    if (trk != NULL)
     {
         // ours alone: the OPL module never saw it
-        Mp3LogPlayed();
-        FreeMp3(mp3);
+        TrackLogPlayed();
+        FreeTrack(trk);
         return;
     }
 
@@ -932,21 +1081,21 @@ static void PS3Music_UnRegisterSong(void *handle)
 
 static void PS3Music_PlaySong(void *handle, boolean looping)
 {
-    boolean soundfont, mp3_ok = false;
-    mp3_song_t *mp3;
+    boolean soundfont, trk_ok = false;
+    track_t *trk;
 
     Lock();
     current_handle = handle;
     current_looping = looping;
     current_on = true;
-    mp3 = FindMp3(handle);
-    Mp3Stop();
-    if (mp3 != NULL)
+    trk = FindTrack(handle);
+    TrackStop();
+    if (trk != NULL)
     {
         // whatever the Music setting: neither synth plays this one
         StopSoundFontSong();
-        Mp3Start(mp3, looping);
-        mp3_ok = (mp3_cur != NULL);
+        TrackStart(trk, looping);
+        trk_ok = (trk_cur != NULL);
         soundfont = false;
     }
     else
@@ -959,17 +1108,17 @@ static void PS3Music_PlaySong(void *handle, boolean looping)
     }
     Unlock();
 
-    if (mp3 != NULL)
+    if (trk != NULL)
     {
         music_opl_module.StopSong();
-        if (mp3_ok)
+        if (trk_ok)
         {
-            PS3_Log("[music] MP3 playing%s, music volume %d/127",
+            PS3_Log("[music] playing%s, music volume %d/127",
                     looping ? " (loop)" : "", music_volume);
         }
         else
         {
-            PS3_Log("[music] the MP3 song has no frame to play");
+            PS3_Log("[music] the song has no frame to play");
         }
     }
     else if (!soundfont)
@@ -985,7 +1134,7 @@ static void PS3Music_StopSong(void)
     Lock();
     current_on = false;
     StopSoundFontSong();
-    Mp3Stop();
+    TrackStop();
     Unlock();
 }
 
@@ -995,7 +1144,7 @@ static boolean PS3Music_MusicIsPlaying(void)
 
     Lock();
     playing = (synth != NULL) ? song_playing : false;
-    if (mp3_cur != NULL)
+    if (trk_cur != NULL)
     {
         playing = true;
     }
@@ -1113,8 +1262,8 @@ void PS3_Music_CycleSynth(int dir)
     ps3_music_sf2 = M_StringDuplicate(next > 0 ? sf2_names[next - 1] : "");
     PS3_Log("[music] now %s", next > 0 ? ps3_music_sf2 : "OPL");
 
-    // an MP3 song is not the synth's: it just goes on
-    if (current_on && current_handle != NULL && FindMp3(current_handle) == NULL)
+    // a recorded song is not the synth's: it just goes on
+    if (current_on && current_handle != NULL && FindTrack(current_handle) == NULL)
     {
         PS3Music_PlaySong(current_handle, current_looping);
     }

@@ -31,8 +31,9 @@ Doom (id Software, 1997) -> Chocolate Doom -> Crispy Doom -> CrispyCell (this pr
   SoundFont (`.sf2`) you copy to the console, such as
   [GeneralUser GS](https://www.schristiancollins.com/generaluser.php).
   See [Music](#music).
-- **MP3 soundtracks:** the MP3 music of `SIGIL_SHREDS.WAD` and
-  `SIGIL_II_MP3.WAD` plays as recorded.
+- **Recorded soundtracks:** music stored in the WADs as Ogg Vorbis or
+  MP3, such as `SIGIL_SHREDS.WAD` and the MP3 edition of SIGIL II, plays
+  as recorded.
 - **Input:** DualShock 3, both sticks, every action reachable from the
   pad and rebindable in the configuration files. Adjustable
   turn/move/look sensitivity from the in-game menu.
@@ -114,11 +115,11 @@ CHEX2.WAD         Chex Quest 2    (needs CHEX.WAD)
 
 `SIGIL_SHREDS.WAD` and `SIGIL_II_MP3.WAD` are not listed separately — they
 are soundtrack replacements and load automatically alongside their episode
-when present. Their music is MP3 and always plays as recorded, whatever the
-Music setting (see [Music](#music)). The MP3 edition of SIGIL II
-(`SIGIL_II_MP3_V1_0.WAD`) is a complete WAD of its own and is listed as
-"SIGIL II (MP3)"; so is a `SIGIL_II_MP3.WAD` that holds maps when there is
-no `SIGIL2.WAD` beside it.
+when present. Their music is recorded (Ogg Vorbis or MP3) and always plays
+as it is, whatever the Music setting (see [Music](#music)). The MP3
+edition of SIGIL II (`SIGIL_II_MP3_V1_0.WAD`) is a complete WAD of its own
+and is listed as "SIGIL II (MP3)"; so is a `SIGIL_II_MP3.WAD` that holds
+maps when there is no `SIGIL2.WAD` beside it.
 
 Some releases ship `NERVE.WAD` and `MASTERLEVELS.WAD` marked as IWADs
 rather than PWADs (the BFG and Unity re-releases do). Those show up as
@@ -384,11 +385,11 @@ game waits. The samples are kept in memory at about twice the file's size,
 so SoundFonts up to roughly 100 MB are a good fit. The choice is saved as
 `ps3_music_sf2` in the game's config file.
 
-Music stored in the WADs as MP3 — the soundtracks of `SIGIL_SHREDS.WAD`
-and `SIGIL_II_MP3.WAD` — is not MIDI, so neither synth applies to it: it
-always plays as recorded, whichever option is chosen, and switching the
-option does not interrupt it. Songs that are MIDI or MUS keep using the
-chosen synth.
+Music stored in the WADs as recordings — Ogg Vorbis, as in
+`SIGIL_SHREDS.WAD`, or MP3, as in the MP3 edition of SIGIL II — is not
+MIDI, so neither synth applies to it: it always plays as recorded,
+whichever option is chosen, and switching the option does not interrupt
+it. Songs that are MIDI or MUS keep using the chosen synth.
 
 ## TV Screen Fit
 
@@ -495,8 +496,8 @@ per-engine differences behind `PS3_GAME_DOOM`, `PS3_GAME_HERETIC`,
 `PS3_GAME_HEXEN` and `PS3_GAME_STRIFE`. The new platform files are
 `src/i_ps3video.c`, `src/i_ps3sound.c`, `src/i_ps3joystick.c`,
 `src/i_ps3launcher.c`, `src/i_ps3stubs.c`, `src/i_ps3input.c` (which also
-holds the on-screen keyboard), `src/i_ps3music.c` (OPL, SoundFont or MP3
-music),
+holds the on-screen keyboard), `src/i_ps3music.c` (OPL, SoundFont, Ogg
+Vorbis or MP3 music),
 `src/net_ps3.c` and `opl/opl_ps3.c`.
 
 Development diagnostics (audio block counters, launcher decisions, every
@@ -520,7 +521,9 @@ voice started) are compiled out of release builds; define
   Schelling — the SoundFont synthesizer and MIDI loader (`src/tsf.h`,
   `src/tml.h`, MIT; `tsf.h` with a big-endian fix for the PS3).
 - [minimp3](https://github.com/lieff/minimp3) by Lion (lieff) — the MP3
-  decoder for the SIGIL soundtracks (`src/minimp3.h`, CC0).
+  decoder (`src/minimp3.h`, CC0).
+- [stb_vorbis](https://github.com/nothings/stb) by Sean Barrett — the Ogg
+  Vorbis decoder (`src/stb_vorbis.c`, public domain or MIT).
 - [GeneralUser GS](https://www.schristiancollins.com/generaluser.php) by
   S. Christian Collins — the SoundFont the music was tested with (not
   included).
@@ -529,7 +532,8 @@ voice started) are compiled out of release builds; define
 
 GPLv2, inherited from Crispy Doom. See [COPYING.md](COPYING.md).
 TinySoundFont (`src/tsf.h`, `src/tml.h`) is MIT, minimp3 (`src/minimp3.h`)
-is public domain (CC0). No SoundFont is included
+is public domain (CC0) and stb_vorbis (`src/stb_vorbis.c`) public domain or
+MIT, at your choice. No SoundFont is included
 in this repository or in the packages.
 
 No commercial game data is included in this repository. You need your own
