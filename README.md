@@ -31,6 +31,8 @@ Doom (id Software, 1997) -> Chocolate Doom -> Crispy Doom -> CrispyCell (this pr
   SoundFont (`.sf2`) you copy to the console, such as
   [GeneralUser GS](https://www.schristiancollins.com/generaluser.php).
   See [Music](#music).
+- **MP3 soundtracks:** the MP3 music of `SIGIL_SHREDS.WAD` and
+  `SIGIL_II_MP3.WAD` plays as recorded.
 - **Input:** DualShock 3, both sticks, every action reachable from the
   pad and rebindable in the configuration files. Adjustable
   turn/move/look sensitivity from the in-game menu.
@@ -70,10 +72,10 @@ coexist on the XMB and keep their own savegames and configuration.
 
 | Package | APPID | Installs to |
 |---|---|---|
-| `CrispyDoom-1.2.pkg` | `CRISPDOOM` | `/dev_hdd0/game/CRISPDOOM/USRDIR/` |
-| `CrispyHeretic-1.2.pkg` | `CRISPHERE` | `/dev_hdd0/game/CRISPHERE/USRDIR/` |
-| `CrispyHexen-1.2.pkg` | `CRISPHEX1` | `/dev_hdd0/game/CRISPHEX1/USRDIR/` |
-| `CrispyStrife-1.2.pkg` | `CRISPSTRF` | `/dev_hdd0/game/CRISPSTRF/USRDIR/` |
+| `CrispyDoom-1.3.pkg` | `CRISPDOOM` | `/dev_hdd0/game/CRISPDOOM/USRDIR/` |
+| `CrispyHeretic-1.3.pkg` | `CRISPHERE` | `/dev_hdd0/game/CRISPHERE/USRDIR/` |
+| `CrispyHexen-1.3.pkg` | `CRISPHEX1` | `/dev_hdd0/game/CRISPHEX1/USRDIR/` |
+| `CrispyStrife-1.3.pkg` | `CRISPSTRF` | `/dev_hdd0/game/CRISPSTRF/USRDIR/` |
 
 Install from the XMB, then FTP your WADs into that folder. The launcher
 picks them up on the next boot — no configuration file to edit.
@@ -112,7 +114,8 @@ CHEX2.WAD         Chex Quest 2    (needs CHEX.WAD)
 
 `SIGIL_SHREDS.WAD` and `SIGIL_II_MP3.WAD` are not listed separately — they
 are soundtrack replacements and load automatically alongside their episode
-when present.
+when present. Their music is MP3 and always plays as recorded, whatever the
+Music setting (see [Music](#music)).
 
 Some releases ship `NERVE.WAD` and `MASTERLEVELS.WAD` marked as IWADs
 rather than PWADs (the BFG and Unity re-releases do). Those show up as
@@ -378,6 +381,12 @@ game waits. The samples are kept in memory at about twice the file's size,
 so SoundFonts up to roughly 100 MB are a good fit. The choice is saved as
 `ps3_music_sf2` in the game's config file.
 
+Music stored in the WADs as MP3 — the soundtracks of `SIGIL_SHREDS.WAD`
+and `SIGIL_II_MP3.WAD` — is not MIDI, so neither synth applies to it: it
+always plays as recorded, whichever option is chosen, and switching the
+option does not interrupt it. Songs that are MIDI or MUS keep using the
+chosen synth.
+
 ## TV Screen Fit
 
 - Doom and Strife: Options -> Crispness -> page 1 (Rendering).
@@ -457,7 +466,7 @@ The `ps3/` directory holds everything specific to this port's build:
 - **`build.sh`** — builds and packages one engine end to end:
   `./ps3/build.sh doom`, `heretic`, `hexen` or `strife`. Rewrites
   `appid.mk`, reconfigures, clears the object tree when the engine changes,
-  builds, and packages `Crispy<Game>-1.2.pkg` in the project root.
+  builds, and packages `Crispy<Game>-1.3.pkg` in the project root.
 - **`icons/`** — the `ICON0.PNG` for each engine's XMB entry (320x176).
 
 `Makefile.crispypkg` in the project root packages an already-built `.elf`
@@ -483,7 +492,8 @@ per-engine differences behind `PS3_GAME_DOOM`, `PS3_GAME_HERETIC`,
 `PS3_GAME_HEXEN` and `PS3_GAME_STRIFE`. The new platform files are
 `src/i_ps3video.c`, `src/i_ps3sound.c`, `src/i_ps3joystick.c`,
 `src/i_ps3launcher.c`, `src/i_ps3stubs.c`, `src/i_ps3input.c` (which also
-holds the on-screen keyboard), `src/i_ps3music.c` (OPL or SoundFont music),
+holds the on-screen keyboard), `src/i_ps3music.c` (OPL, SoundFont or MP3
+music),
 `src/net_ps3.c` and `opl/opl_ps3.c`.
 
 Development diagnostics (audio block counters, launcher decisions, every
@@ -506,6 +516,8 @@ voice started) are compiled out of release builds; define
 - [TinySoundFont](https://github.com/schellingb/TinySoundFont) by Bernhard
   Schelling — the SoundFont synthesizer and MIDI loader (`src/tsf.h`,
   `src/tml.h`, MIT; `tsf.h` with a big-endian fix for the PS3).
+- [minimp3](https://github.com/lieff/minimp3) by Lion (lieff) — the MP3
+  decoder for the SIGIL soundtracks (`src/minimp3.h`, CC0).
 - [GeneralUser GS](https://www.schristiancollins.com/generaluser.php) by
   S. Christian Collins — the SoundFont the music was tested with (not
   included).
@@ -513,7 +525,8 @@ voice started) are compiled out of release builds; define
 ## License
 
 GPLv2, inherited from Crispy Doom. See [COPYING.md](COPYING.md).
-TinySoundFont (`src/tsf.h`, `src/tml.h`) is MIT. No SoundFont is included
+TinySoundFont (`src/tsf.h`, `src/tml.h`) is MIT, minimp3 (`src/minimp3.h`)
+is public domain (CC0). No SoundFont is included
 in this repository or in the packages.
 
 No commercial game data is included in this repository. You need your own

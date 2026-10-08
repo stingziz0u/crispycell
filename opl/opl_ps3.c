@@ -362,9 +362,10 @@ static int OPL_PS3_Init(unsigned int port_base)
     audio_running = 1;
     // Priority 500, ahead of the game thread's 1000 (lower runs first
     // on LV2): the ring holds ~21 ms, so audio must not queue behind a
-    // busy frame.
+    // busy frame. 128 KB of stack: the MP3 decoder (i_ps3music.c) puts
+    // ~17 KB of scratch on it.
     ret = sysThreadCreate(&audio_thread_id, OPL_PS3_AudioThread, NULL,
-                           500, 64 * 1024, THREAD_JOINABLE, (char *)"ps3_opl_audio");
+                           500, 128 * 1024, THREAD_JOINABLE, (char *)"ps3_opl_audio");
     if (ret != 0)
     {
         fprintf(stderr, "OPL PS3: sysThreadCreate failed (%d)\n", (int)ret);

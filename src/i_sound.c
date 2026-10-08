@@ -515,6 +515,12 @@ void *I_RegisterSong(void *data, int len)
 #ifndef DISABLE_SDL2MIXER
         active_music_module = &music_sdl_module;
         return active_music_module->RegisterSong(data, len);
+#elif defined(PS3_BUILD)
+        // [PS3] MP3 lumps (SIGIL_SHREDS.WAD, SIGIL_II_MP3.WAD): the PS3
+        // module plays them itself (i_ps3music.c), NULL for anything else
+        active_music_module = music_module;
+        return active_music_module != NULL ?
+               active_music_module->RegisterSong(data, len) : NULL;
 #else
         return NULL;
 #endif
