@@ -320,6 +320,110 @@ static char st_msgbuf[ST_MSGWIDTH];
 
 // Respond to keyboard input events,
 //  intercept cheats.
+#ifdef PS3_DEBUG_CHEATS
+//
+// [PS3] Debug package only (./ps3/build.sh strife-debug): the cheats a
+// tester needs, on the pad, since there is no keyboard to type them.
+// i_ps3joystick.c calls this while L3 and R3 are held together:
+//   0 triangle  god mode on/off           (omnipotent)
+//   1 square    all weapons, full ammo    (boomstix)
+//   2 cross     next map                  (rift NN, NN = this map + 1)
+//   3 circle    all keys                  (jimmy)
+// The same code as the typed cheats below, and the same limits: only in
+// a level, single player.
+//
+extern void PS3_Log(const char *fmt, ...);
+
+void ST_PS3DebugCheat(int which)
+{
+    player_t *p = &players[consoleplayer];
+    int i;
+
+    if (gamestate != GS_LEVEL || netgame || !usergame || p->mo == NULL
+     || menuactive)
+    {
+        return;
+    }
+
+    switch (which)
+    {
+        case 0:
+            p->cheats ^= CF_GODMODE;
+            if (p->cheats & CF_GODMODE)
+            {
+                p->mo->health = 100;
+                p->health = deh_god_mode_health;
+                p->message = DEH_String(STSTR_DQDON);
+            }
+            else
+            {
+                p->message = DEH_String(STSTR_DQDOFF);
+            }
+            p->st_update = true;
+            PS3_Log("[debug] god mode %s", (p->cheats & CF_GODMODE) ? "on" : "off");
+            break;
+
+        case 1:
+            p->armorpoints = deh_idkfa_armor;
+            p->armortype = deh_idkfa_armor_class;
+            for (i = 0; i < NUMWEAPONS; i++)
+            {
+                if (!isdemoversion || weaponinfo[i].availabledemo)
+                {
+                    p->weaponowned[i] = true;
+                }
+            }
+            p->weaponowned[wp_sigil] = false;   // as boomstix
+            for (i = 0; i < NUMAMMO; i++)
+            {
+                p->ammo[i] = p->maxammo[i];
+            }
+            p->st_update = true;
+            p->message = DEH_String(STSTR_FAADDED);
+            PS3_Log("[debug] all weapons (map %d)", gamemap);
+            break;
+
+        case 2:
+        {
+            // the next map that exists, wrapping round to MAP01
+            int map = gamemap, tries;
+            char name[9];
+
+            for (tries = 0; tries < 40; tries++)
+            {
+                map = map >= 40 ? 1 : map + 1;
+                M_snprintf(name, sizeof(name), "MAP%02d", map);
+                if (W_CheckNumForName(name) >= 0)
+                {
+                    break;
+                }
+            }
+            if (map == gamemap)
+            {
+                return;
+            }
+            PS3_Log("[debug] map %d -> %d", gamemap, map);
+            p->message = DEH_String(STSTR_CLEV);
+            G_RiftExitLevel(map, 0, p->mo->angle);
+            break;
+        }
+
+        case 3:
+            for (i = 0; i < NUMCARDS; i++)
+            {
+                p->cards[i] = true;
+            }
+            p->st_update = true;
+            p->message = DEH_String("Cheater Keys Added");
+            PS3_Log("[debug] all keys (map %d)", gamemap);
+            break;
+
+        default:
+            break;
+    }
+}
+#endif
+
 boolean ST_Responder(event_t* ev)
 {
     // haleyjd 09/27/10: made static to ST_Responder

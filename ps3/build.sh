@@ -4,6 +4,10 @@
 #   ./ps3/build.sh doom
 #   ./ps3/build.sh heretic
 #   ./ps3/build.sh hexen
+#   ./ps3/build.sh strife
+#   ./ps3/build.sh strife-debug   Strife with cheats on the pad (L3+R3 +
+#                                 triangle/square/cross/circle), same
+#                                 APPID: installs over the normal one
 #
 # Rewrites ps3/appid.mk, reconfigures cmake so the per-game defines are
 # picked up, builds, and packages -- in that order, with set -e, so a
@@ -12,13 +16,18 @@ set -e
 
 GAME="$1"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DEBUG=0
+SUFFIX=""
 
 case "$GAME" in
     doom)    APPID=CRISPDOOM; TITLE="Crispy Doom" ;;
     heretic) APPID=CRISPHERE; TITLE="Crispy Heretic" ;;
     hexen)   APPID=CRISPHEX1; TITLE="Crispy Hexen" ;;
     strife)  APPID=CRISPSTRF; TITLE="Crispy Strife" ;;
-    *) echo "uso: $0 {doom|heretic|hexen|strife}"; exit 1 ;;
+    strife-debug)
+             GAME=strife; DEBUG=1; SUFFIX="-debug"
+             APPID=CRISPSTRF; TITLE="Crispy Strife (debug)" ;;
+    *) echo "uso: $0 {doom|heretic|hexen|strife|strife-debug}"; exit 1 ;;
 esac
 
 cat > "$ROOT/ps3/appid.mk" << EOF
@@ -33,6 +42,9 @@ PS3_GAME  := $GAME
 # underscore, which silently breaks every path built from it.
 PS3_APPID := $APPID
 PS3_TITLE := $TITLE
+
+# 1 = the debug package (cheats on the pad), see ./ps3/build.sh
+PS3_DEBUG := $DEBUG
 EOF
 
 cd "$ROOT/build-ps3"
@@ -43,13 +55,15 @@ cd "$ROOT/build-ps3"
 # switch would silently reuse the previous game's i_ps3launcher.c.obj,
 # launcher title and all.
 STAMP="$ROOT/build-ps3/.ps3_game"
-if [ ! -f "$STAMP" ] || [ "$(cat "$STAMP")" != "$GAME" ]; then
+# The debug package counts as another engine: its objects carry
+# PS3_DEBUG_CHEATS.
+if [ ! -f "$STAMP" ] || [ "$(cat "$STAMP")" != "$GAME$SUFFIX" ]; then
     echo "engine changed -> clearing object tree"
     rm -rf "$ROOT/build-ps3/src/CMakeFiles"
-    echo "$GAME" > "$STAMP"
+    echo "$GAME$SUFFIX" > "$STAMP"
 fi
 
-cmake .. -DCMAKE_TOOLCHAIN_FILE=../ps3/crispy-ps3-toolchain.cmake -DPS3_BUILD=ON 2>&1 | grep -i "ps3 appid"
+cmake .. -DCMAKE_TOOLCHAIN_FILE=../ps3/crispy-ps3-toolchain.cmake -DPS3_BUILD=ON 2>&1 | grep -i "ps3 appid\|ps3 debug"
 make "crispy-$GAME" 2>&1 | tail -3
 
 # Test builds of 1.2 packed a SoundFont from here; the packages carry
@@ -61,8 +75,9 @@ rm -rf build "crispy-$GAME.self" "crispy-$GAME.pkg" \
        "crispy-$GAME.gnpdrm.pkg" "crispy-$GAME.fake.self"
 cp "crispy-$GAME" "crispy-$GAME.elf"
 make -f ../../Makefile.crispypkg 2>&1 | tail -2
-cp "crispy-$GAME.gnpdrm.pkg" "$ROOT/Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.3.pkg"
+PKG="Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.3$SUFFIX.pkg"
+cp "crispy-$GAME.gnpdrm.pkg" "$ROOT/$PKG"
 
 echo
-echo "=== LISTO: Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.3.pkg ($APPID) ==="
-ls -la "$ROOT/Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.3.pkg"
+echo "=== LISTO: $PKG ($APPID) ==="
+ls -la "$ROOT/$PKG"

@@ -111,6 +111,10 @@ static struct
     { &joybinvdrop,   &key_invdrop,   false },
 };
 
+#ifdef PS3_DEBUG_CHEATS
+void ST_PS3DebugCheat(int which);   // st_stuff.c
+#endif
+
 static void PostKey(evtype_t type, int key)
 {
     event_t ev;
@@ -275,6 +279,36 @@ void I_UpdateJoystick(void)
 #endif
     held_until_release &= buttons;      // forget what has been let go
     buttons &= ~held_until_release;
+
+#if defined(PS3_GAME_STRIFE) && defined(PS3_DEBUG_CHEATS)
+    {
+        // [PS3] Debug package only: L3 + R3 held turns the face buttons
+        // into cheats (ST_PS3DebugCheat, st_stuff.c). None of them reach
+        // the game while the chord is held, nor until they are let go.
+        static unsigned debug_prev = 0;
+        const unsigned chord = BUTTON_L3 | BUTTON_R3;
+        const unsigned face = BUTTON_TRIANGLE | BUTTON_SQUARE
+                            | BUTTON_CROSS | BUTTON_CIRCLE;
+
+        if ((buttons & chord) == chord)
+        {
+            const unsigned pressed = buttons & ~debug_prev;
+
+            if (pressed & BUTTON_TRIANGLE) ST_PS3DebugCheat(0);
+            if (pressed & BUTTON_SQUARE)   ST_PS3DebugCheat(1);
+            if (pressed & BUTTON_CROSS)    ST_PS3DebugCheat(2);
+            if (pressed & BUTTON_CIRCLE)   ST_PS3DebugCheat(3);
+
+            held_until_release |= buttons & face;
+            debug_prev = buttons;
+            buttons &= ~(chord | face);
+        }
+        else
+        {
+            debug_prev = buttons;
+        }
+    }
+#endif
 
     ev.type = ev_joystick;
     ev.data1 = 0;
