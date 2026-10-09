@@ -113,6 +113,24 @@ static struct
 
 #ifdef PS3_DEBUG_CHEATS
 void ST_PS3DebugCheat(int which);   // st_stuff.c
+void PS3_Autotest_Toggle(void);     // strife/ps3_autotest.c
+boolean PS3_Autotest_Drive(unsigned *vbuttons, int *lx, int *ly,
+                           int *rx, int *ry);
+
+// The pad bit of each VBTN_* index, for the autotest's made-up pad.
+static const unsigned vbtn_raw[16] =
+{
+    BUTTON_CROSS, BUTTON_SQUARE, BUTTON_CIRCLE, BUTTON_TRIANGLE,
+    BUTTON_L1, BUTTON_R1, BUTTON_L2, BUTTON_R2,
+    BUTTON_L3, BUTTON_R3, BUTTON_SELECT, BUTTON_START,
+    BUTTON_UP, BUTTON_DOWN, BUTTON_LEFT, BUTTON_RIGHT,
+};
+
+static unsigned char StickByte(int v)
+{
+    v += 128;
+    return (unsigned char) (v < 0 ? 0 : v > 255 ? 255 : v);
+}
 #endif
 
 static void PostKey(evtype_t type, int key)
@@ -254,6 +272,42 @@ void I_UpdateJoystick(void)
 
     buttons = (pad_data.button[2] << 8) | (pad_data.button[3] & 0xff);
 
+#if defined(PS3_GAME_STRIFE) && defined(PS3_DEBUG_CHEATS)
+    {
+        // [PS3] Debug package only: L3 + R3 + SELECT starts and stops
+        // the autotest (strife/ps3_autotest.c). While it runs, its
+        // made-up pad replaces this one from here on, so its presses
+        // take exactly the path a player's do.
+        static unsigned toggle_prev = 0;
+        const unsigned toggle = BUTTON_L3 | BUTTON_R3 | BUTTON_SELECT;
+        unsigned vb;
+        int alx, aly, arx, ary, b;
+
+        if ((buttons & toggle) == toggle && (toggle_prev & toggle) != toggle)
+        {
+            PS3_Autotest_Toggle();
+            held_until_release |= buttons;  // none of it reaches the game
+        }
+        toggle_prev = buttons;
+
+        if (PS3_Autotest_Drive(&vb, &alx, &aly, &arx, &ary))
+        {
+            buttons = 0;
+            for (b = 0; b < 16; b++)
+            {
+                if (vb & (1u << b))
+                {
+                    buttons |= vbtn_raw[b];
+                }
+            }
+            pad_data.button[4] = StickByte(arx);
+            pad_data.button[5] = StickByte(ary);
+            pad_data.button[6] = StickByte(alx);
+            pad_data.button[7] = StickByte(aly);
+        }
+    }
+#endif
+
     if (osk_was_up)
     {
         held_until_release = buttons;
@@ -288,7 +342,8 @@ void I_UpdateJoystick(void)
         static unsigned debug_prev = 0;
         const unsigned chord = BUTTON_L3 | BUTTON_R3;
         const unsigned face = BUTTON_TRIANGLE | BUTTON_SQUARE
-                            | BUTTON_CROSS | BUTTON_CIRCLE;
+                            | BUTTON_CROSS | BUTTON_CIRCLE
+                            | BUTTON_SELECT;    // the autotest's toggle
 
         if ((buttons & chord) == chord)
         {

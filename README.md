@@ -474,8 +474,14 @@ The `ps3/` directory holds everything specific to this port's build:
   `./ps3/build.sh strife-debug` makes `CrispyStrife-1.3-debug.pkg`, a
   test build of Strife with cheats on the pad: hold L3 + R3 and press
   Triangle (god mode), Square (all weapons and ammo), Cross (next map) or
-  Circle (all keys). It has the same APPID and installs over the normal
-  one.
+  Circle (all keys). L3 + R3 + Select, inside a level, starts an
+  autotest that plays every map in turn, round and round until stopped
+  the same way: god mode and everything given, 30 s of wandering and
+  fighting, the automap (zoom, overlay, rotate, quick open/close), the
+  inventory and pop-ups, a save to the last slot ("AUTOTEST", which it
+  overwrites) and its load, then the next map. Dialogues get answered on
+  the way. Each step is logged as `[auto]`, with a heartbeat every 10 s.
+  It has the same APPID and installs over the normal one.
 - **`icons/`** — the `ICON0.PNG` for each engine's XMB entry (320x176).
 
 `Makefile.crispypkg` in the project root packages an already-built `.elf`
