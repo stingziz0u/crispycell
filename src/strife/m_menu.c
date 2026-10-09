@@ -19,6 +19,7 @@
 
 
 #include <stdlib.h>
+#include "i_ps3debug.h" // [PS3] debug package
 #include <ctype.h>
 #include <time.h> // [crispy] strftime, localtime
 
@@ -3315,6 +3316,8 @@ void M_StartControlPanel (void)
     if (menuactive)
         return;
     
+    PS3_CRUMB("M_StartControlPanel", gamestate);
+    PS3_DEBUG_LOG("[game] menu opened");
     menuactive = 1;
     menupause = true;
     currentMenu = &MainDef;         // JDC
@@ -3450,6 +3453,11 @@ void M_Drawer (void)
 void M_ClearMenus (int choice)
 {
     choice = 0;     // haleyjd: for no warning; not from decompilation.
+    PS3_CRUMB("M_ClearMenus", menuactive);
+    if (menuactive)
+    {
+        PS3_DEBUG_LOG("[game] menu closed");
+    }
     menuactive = 0;
     menupause = 0;
 }

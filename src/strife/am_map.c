@@ -18,6 +18,7 @@
 
 
 #include <stdio.h>
+#include "i_ps3debug.h" // [PS3] debug package
 
 #include "deh_main.h"
 
@@ -667,6 +668,11 @@ void AM_Stop (void)
 {
     static event_t st_notify = { 0, ev_keyup, AM_MSGEXITED, 0 };
 
+    PS3_CRUMB("AM_Stop", gamemap);
+    if (automapactive)
+    {
+        PS3_DEBUG_LOG("[game] automap closed on map %d", gamemap);
+    }
     AM_unloadPics();
     automapactive = false;
     ST_Responder(&st_notify);
@@ -684,6 +690,10 @@ void AM_Start (void)
 
     if (!stopped) AM_Stop();
     stopped = false;
+    PS3_CRUMB("AM_Start", gamemap);
+    PS3_DEBUG_LOG("[game] automap opened on map %d (overlay %d rotate %d "
+                  "smooth %d)", gamemap, crispy->automapoverlay,
+                  crispy->automaprotate, crispy->smoothmap);
     if (lastlevel != gamemap  /*|| lastepisode != gameepisode*/)
     {
 	AM_LevelInit(false);

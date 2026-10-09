@@ -20,6 +20,7 @@
 
 
 #include <math.h>
+#include "i_ps3debug.h" // [PS3] debug package
 
 #include "p_mapformat.h"
 #include "z_zone.h"
@@ -899,6 +900,9 @@ P_SetupLevel
     int     lumpnum;
     mapformat_t	crispy_mapformat;
     boolean crispy_validblockmap;
+
+    PS3_CRUMB("P_SetupLevel", map);
+    PS3_DEBUG_LOG("[game] loading map %d (skill %d)", map, (int) skill);
 
     // haleyjd 20110205 [STRIFE]: removed totalitems and wminfo
     totalkills =  totalsecret = 0;

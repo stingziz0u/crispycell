@@ -94,6 +94,7 @@ set(GAME_SOURCE_FILES
     i_ps3sound.c
     i_ps3launcher.c
     i_ps3music.c
+    i_ps3debug.c        i_ps3debug.h
     i_ps3stubs.c
     i_videohr.c         i_videohr.h
     i_winmusic.c
@@ -166,6 +167,12 @@ if(PS3_BUILD)
     # appearing/disappearing depending on whether PS3_RSX_Init got
     # inlined into I_InitGraphics). Build this one file at -O1.
     set_source_files_properties(i_ps3video.c PROPERTIES COMPILE_OPTIONS "-O1;-fno-inline")
+    if(PS3_DEBUG)
+        # [PS3] Debug package: the shared code the game thread runs most
+        # also goes into the function trace (i_ps3debug.c).
+        set_source_files_properties(z_zone.c w_wad.c v_video.c d_loop.c
+                                    PROPERTIES COMPILE_OPTIONS "-finstrument-functions")
+    endif()
     list(REMOVE_ITEM GAME_SOURCE_FILES i_sdlmusic.c i_sdlsound.c net_gui.c)
     list(REMOVE_ITEM SOURCE_FILES i_sdlmusic.c i_sdlsound.c net_gui.c)
     list(REMOVE_ITEM SOURCE_FILES_WITH_DEH i_sdlmusic.c i_sdlsound.c net_gui.c)

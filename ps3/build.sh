@@ -78,6 +78,13 @@ make -f ../../Makefile.crispypkg 2>&1 | tail -2
 PKG="Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.3$SUFFIX.pkg"
 cp "crispy-$GAME.gnpdrm.pkg" "$ROOT/$PKG"
 
+# The debug package's crash dump has function addresses: they are named
+# from this exact ELF (ps3/tools/crashaddr.py). Keep it with the .pkg.
+if [ "$DEBUG" = 1 ]; then
+    cp "crispy-$GAME.elf" "$ROOT/${PKG%.pkg}.elf"
+    echo "ELF for the crash dumps: ${PKG%.pkg}.elf"
+fi
+
 echo
 echo "=== LISTO: $PKG ($APPID) ==="
 ls -la "$ROOT/$PKG"

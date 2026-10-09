@@ -42,6 +42,7 @@
 #include "m_config.h"
 #include "m_misc.h"
 #include "i_joystick.h"
+#include "i_ps3debug.h"
 #include "i_sound.h"
 #include "i_timer.h"
 #include "i_video.h"
@@ -317,6 +318,9 @@ void I_Error (const char *error, ...)
         M_vsnprintf(ps3buf, sizeof(ps3buf), error, ps3ap);
         va_end(ps3ap);
         PS3_Log("!!! I_Error: %s", ps3buf);
+#ifdef PS3_DEBUG_CHEATS
+        PS3_Debug_Dump("I_Error");
+#endif
     }
 
     if (already_quitting)

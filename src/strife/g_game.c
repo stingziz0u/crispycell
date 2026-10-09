@@ -16,6 +16,7 @@
 //
 
 #include <string.h>
+#include "i_ps3debug.h" // [PS3] debug package
 #include <stdlib.h>
 #include <math.h>
 
@@ -1309,6 +1310,7 @@ void G_Ticker (void)
     // do things to change the game state
     while (gameaction != ga_nothing)
     { 
+        PS3_CRUMB("gameaction", gameaction);
         switch (gameaction) 
         { 
         case ga_loadlevel: 
@@ -1786,6 +1788,9 @@ void G_ScreenShot (void)
 //
 void G_RiftExitLevel(int map, int spot, angle_t angle)
 {
+    PS3_CRUMB("G_RiftExitLevel", map);
+    PS3_DEBUG_LOG("[game] rift from map %d to map %d spot %d", gamemap, map,
+                  spot);
     gameaction = ga_completed;
     
     // special handling for post-Sigil map changes
@@ -2086,6 +2091,8 @@ void G_DoLoadGame (boolean userload)
     skill_t skill; // [crispy]
 
     gameaction = ga_nothing;
+    PS3_CRUMB("G_DoLoadGame", userload);
+    PS3_DEBUG_LOG("[game] loading %s", loadpath);
 
     save_stream = M_fopen(loadpath, "rb");
 
@@ -2220,6 +2227,9 @@ void G_DoSaveGame (char *path)
     char *temp_savegame_file;
     byte gamemapbytes[4];
     char gamemapstr[33];
+
+    PS3_CRUMB("G_DoSaveGame", gamemap);
+    PS3_DEBUG_LOG("[game] saving map %d to %s", gamemap, path);
 
     temp_savegame_file = P_TempSaveGameFile();
     

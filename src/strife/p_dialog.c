@@ -20,6 +20,7 @@
 //
 
 #include <stdlib.h>
+#include "i_ps3debug.h" // [PS3] debug package
 
 #include "z_zone.h"
 #include "w_wad.h"
@@ -1286,6 +1287,9 @@ void P_DialogStart(player_t *player)
 
     // set pointer to the character talking
     dialogtalker = linetarget;
+    PS3_CRUMB("P_DialogStart", linetarget->type);
+    PS3_DEBUG_LOG("[game] dialogue with thing type %d on map %d",
+                  (int) linetarget->type, gamemap);
 
     // play a sound
     if(player == &players[consoleplayer])

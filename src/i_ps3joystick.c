@@ -343,7 +343,8 @@ void I_UpdateJoystick(void)
         const unsigned chord = BUTTON_L3 | BUTTON_R3;
         const unsigned face = BUTTON_TRIANGLE | BUTTON_SQUARE
                             | BUTTON_CROSS | BUTTON_CIRCLE
-                            | BUTTON_SELECT;    // the autotest's toggle
+                            | BUTTON_SELECT     // the autotest's toggle
+                            | BUTTON_UP;        // the frame counter
 
         if ((buttons & chord) == chord)
         {
@@ -353,6 +354,7 @@ void I_UpdateJoystick(void)
             if (pressed & BUTTON_SQUARE)   ST_PS3DebugCheat(1);
             if (pressed & BUTTON_CROSS)    ST_PS3DebugCheat(2);
             if (pressed & BUTTON_CIRCLE)   ST_PS3DebugCheat(3);
+            if (pressed & BUTTON_UP)       ST_PS3DebugCheat(4);
 
             held_until_release |= buttons & face;
             debug_prev = buttons;

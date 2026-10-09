@@ -21,6 +21,7 @@
 
 
 #include <ctype.h>
+#include "i_ps3debug.h" // [PS3] debug package
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -245,6 +246,11 @@ void D_Display (void)
     if (nodrawers)
         return;                    // for comparative timing / profiling
 
+#ifdef PS3_DEBUG_CHEATS
+    PS3_Debug_Frame();
+    PS3_CRUMB("D_Display", gamestate | (automapactive << 4)
+                           | (menuactive << 5) | (gametic << 8));
+#endif
     redrawsbar = false;
     
     if (crispy->uncapped)

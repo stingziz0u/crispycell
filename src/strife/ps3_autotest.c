@@ -120,10 +120,13 @@ static boolean Tap(int t, int at)
     return t >= at && t < at + 3;
 }
 
+extern void PS3_Crumb(const char *tag, int val);
+
 static void SetPhase(phase_t p)
 {
     phase = p;
     phase_start = I_GetTime();
+    PS3_Crumb("autotest phase", (int) p | (gamemap << 8));
     PS3_Log("[auto] pass %d map %d: %s", pass, gamemap, phase_names[p]);
 }
 

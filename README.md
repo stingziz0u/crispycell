@@ -481,6 +481,15 @@ The `ps3/` directory holds everything specific to this port's build:
   inventory and pop-ups, a save to the last slot ("AUTOTEST", which it
   overwrites) and its load, then the next map. Dialogues get answered on
   the way. Each step is logged as `[auto]`, with a heartbeat every 10 s.
+  L3 + R3 + D-pad up turns the frame counter on and off. The debug
+  package also keeps a trail in memory -- the last breadcrumbs and every
+  function entry and exit of the Strife code -- and if the game thread
+  dies, or on a fatal error, writes it to `crispy_log.txt` (`[crash]`,
+  `[crumb]`, `[stack]`, `[ftrace]`), with the frame rate every 30 s
+  (`[hb]`) and map loads, dialogues, saves, the automap and menus as
+  `[game]`. `ps3/build.sh` keeps `CrispyStrife-1.3-debug.elf` next to the
+  package; `python3 ps3/tools/crashaddr.py CrispyStrife-1.3-debug.elf
+  crispy_log.txt` names the addresses in the dump from it.
   It has the same APPID and installs over the normal one.
 - **`icons/`** — the `ICON0.PNG` for each engine's XMB entry (320x176).
 

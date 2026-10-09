@@ -16,6 +16,7 @@
 //
 
 #include <stdio.h>
+#include "i_ps3debug.h" // [PS3] debug package
 #include <stdlib.h>
 #include <ctype.h>
 
@@ -834,6 +835,7 @@ void S_ChangeMusic(int musicnum, int looping)
     char namebuf[9];
     void *handle;
 
+    PS3_CRUMB("S_ChangeMusic", musicnum);
     if (musicnum <= mus_None || musicnum >= NUMMUSIC)
     {
         I_Error("Bad music number %d", musicnum);

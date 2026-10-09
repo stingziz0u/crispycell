@@ -329,10 +329,12 @@ static char st_msgbuf[ST_MSGWIDTH];
 //   1 square    all weapons, full ammo    (boomstix)
 //   2 cross     next map                  (rift NN, NN = this map + 1)
 //   3 circle    all keys                  (jimmy)
+//   4 d-pad up  frame counter on/off      (showfps)
 // The same code as the typed cheats below, and the same limits: only in
 // a level, single player.
 //
 extern void PS3_Log(const char *fmt, ...);
+extern void PS3_Crumb(const char *tag, int val);
 
 void ST_PS3DebugCheat(int which)
 {
@@ -345,6 +347,7 @@ void ST_PS3DebugCheat(int which)
         return;
     }
 
+    PS3_Crumb("ST_PS3DebugCheat", which);
     switch (which)
     {
         case 0:
@@ -416,6 +419,12 @@ void ST_PS3DebugCheat(int which)
             p->st_update = true;
             p->message = DEH_String("Cheater Keys Added");
             PS3_Log("[debug] all keys (map %d)", gamemap);
+            break;
+
+        case 4:
+            p->powers[pw_showfps] ^= 1;
+            p->message = DEH_String(p->powers[pw_showfps] ? STSTR_SHOWFPSON
+                                                          : STSTR_SHOWFPSOFF);
             break;
 
         default:

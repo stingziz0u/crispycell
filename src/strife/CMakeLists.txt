@@ -74,6 +74,18 @@ set(STRIFE_SOURCES
 
 add_library(strife STATIC ${STRIFE_SOURCES})
 
+if(PS3_DEBUG)
+    # [PS3] Debug package (./ps3/build.sh strife-debug): every Strife
+    # function writes its entry and exit to a ring in memory, dumped to the
+    # log if the game thread dies (src/i_ps3debug.c). r_draw.c stays out:
+    # its column and span drawers are the inner loop of the renderer.
+    set(_ps3_ftrace ${STRIFE_SOURCES})
+    list(FILTER _ps3_ftrace INCLUDE REGEX "\\.c$")
+    list(REMOVE_ITEM _ps3_ftrace r_draw.c)
+    set_source_files_properties(${_ps3_ftrace} PROPERTIES
+                                COMPILE_OPTIONS "-finstrument-functions")
+endif()
+
 target_include_directories(strife PRIVATE "../" "../../win32/" "${CMAKE_CURRENT_BINARY_DIR}/../../")
 # [PS3] No SDL and no textscreen here: the VGA-text startup screen that
 # pulled textscreen in is stubbed out of d_main.c, and the platform

@@ -45,6 +45,7 @@ SYS_PROCESS_PARAM(1001, 0x100000)
 #include "i_system.h"
 #include "m_argv.h"
 #include "m_misc.h"
+#include "i_ps3debug.h"
 
 
 //
@@ -117,6 +118,9 @@ static void PS3_SysutilCallback(u64 status, u64 param, void *userdata)
 static void PS3_DoomThread(void *arg)
 {
     PS3_Log("=== Crispy Doom PS3 boot (worker thread) ===");
+#ifdef PS3_DEBUG_CHEATS
+    PS3_Debug_ThreadStart();
+#endif
 
     if (sysUtilRegisterCallback(0, PS3_SysutilCallback, NULL) != 0)
     {
@@ -272,6 +276,14 @@ int main(int argc, char **argv)
     PS3_Log("main: waiting on sysThreadJoin...");
     sysThreadJoin(thread_id, &exit_code);
     PS3_Log("main: sysThreadJoin returned, exit_code=%llu", (unsigned long long)exit_code);
+#ifdef PS3_DEBUG_CHEATS
+    // The game thread died (it never returns on its own): what it was
+    // doing, from the trail it left in memory.
+    if (exit_code != 0)
+    {
+        PS3_Debug_Dump("game thread died");
+    }
+#endif
     return (int)exit_code;
 }
 
