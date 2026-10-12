@@ -72,7 +72,12 @@
 #define HU_INPUTWIDTH	64
 #define HU_INPUTHEIGHT	1
 
-#define HU_COORDX	((ORIGWIDTH - 8 * hu_font['A'-HU_FONTSTART]->width) + WIDESCREENDELTA)
+// [PS3] SHORT(): patch fields are little-endian in the WAD. Without it
+// the width reads as 256 times too big on the PS3, the x of the player
+// coordinates and FPS lines lands at about -14000, and V_DrawPatch's
+// clipping overflows on it and draws from outside the patch: Strife
+// crashed with "Show Player Coords: In Automap" as soon as the map opened.
+#define HU_COORDX	((ORIGWIDTH - 8 * SHORT(hu_font['A'-HU_FONTSTART]->width)) + WIDESCREENDELTA)
 
 
 char *chat_macros[10];

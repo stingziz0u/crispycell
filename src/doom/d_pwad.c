@@ -31,6 +31,7 @@
 #include "w_wad.h"
 #include "w_merge.h" // [crispy] W_MergeFile()
 #include "z_zone.h"  // [crispy] kex masterlevels
+#include "i_swap.h"  // [PS3] SHORT()
 
 extern char *iwadfile;
 
@@ -492,7 +493,7 @@ int D_CheckMasterlevelKex (void)
 	if (lumpnum > -1)
 	{
 		patch = W_CacheLumpNum(lumpnum, PU_CACHE);
-		width = patch->width;
+		width = SHORT(patch->width); // [PS3] little-endian field
 	}
 	else
 	{
@@ -521,7 +522,7 @@ int D_CheckMasterlevelKex (void)
 	// compare width of patches CWILV17 vs CWILV14
 	// kex: CWILV17:"The Express Elevator\nTo Hell" > CWILV14:"Vesperas"
 	// psn/unity: CWILV17:"Vesperas" < CWILV14:"Mephistos Maosoleum"
-	if (patch != NULL && patch->width < width)
+	if (patch != NULL && SHORT(patch->width) < width) // [PS3] as above
 	{
 		masterlevels_kex = true;
 	}

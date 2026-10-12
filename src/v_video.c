@@ -292,6 +292,17 @@ void V_DrawPatch(int x, int y, patch_t *patch)
     }
 #endif
 
+#ifdef PS3_BUILD
+    // [PS3] Wholly off the left edge: nothing to draw. Without this, a
+    // far-off x (the player coordinates' -14000 or so, see hu_stuff.c)
+    // overflowed -x * dx below, and the drawing read column offsets from
+    // outside the patch.
+    if (x + SHORT(patch->width) <= 0)
+    {
+        return;
+    }
+#endif
+
     V_MarkRect(x, y, SHORT(patch->width), SHORT(patch->height));
 
     col = 0;
