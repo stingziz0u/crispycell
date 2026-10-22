@@ -34,6 +34,9 @@
 #include "r_local.h"
 #include "s_sound.h"
 #include "i_sound.h" // [PS3] PS3_Music_*
+#ifdef PS3_BUILD
+#include "i_ps3gpu.h" // [PS3] renderer options
+#endif
 #include "v_video.h"
 #include "am_map.h"
 
@@ -161,6 +164,8 @@ static void CrispySmoothLighting(int option);
 static void CrispySoundMono(int option);
 #ifdef PS3_BUILD
 static void PS3MusicSynth(int option);
+static void PS3Renderer(int option);
+static void PS3TexFilter(int option);
 #endif
 static void CrispyTranslucency(int option);
 static void CrispySndChannels(int option);
@@ -462,6 +467,11 @@ static void CrispyGamma(int option)
 static MenuItem_t Crispness1Items[] = {
     {ITT_LRFUNC2, "HIGH RESOLUTION RENDERING:", CrispyHires, 0, MENU_NONE},
     {ITT_LRFUNC2, "ASPECT RATIO:", CrispyToggleWidescreen, 0, MENU_NONE},
+#ifdef PS3_BUILD
+    // [PS3] 1.4: the GPU renderer
+    {ITT_LRFUNC2, "RENDERER:", PS3Renderer, 0, MENU_NONE},
+    {ITT_LRFUNC2, "TEXTURE FILTER:", PS3TexFilter, 0, MENU_NONE},
+#endif
 #ifndef PS3_BUILD
     // [PS3] Both are SDL renderer concepts: vsync is requested when the
     // renderer is created, smooth scaling is an SDL texture filter. The
@@ -482,7 +492,10 @@ static MenuItem_t Crispness1Items[] = {
     {ITT_LRFUNC2, "SMOOTH DIMINISHING LIGHTING:", CrispySmoothLighting, 0, MENU_NONE},
     {ITT_LRFUNC2, "ENABLE TRANSLUCENCY:", CrispyTranslucency, 0, MENU_NONE},
     {ITT_EMPTY, NULL, NULL, 0, MENU_NONE},
+#ifndef PS3_BUILD
+    // [PS3] the two renderer lines took this one's room
     {ITT_EMPTY, NULL, NULL, 0, MENU_NONE},
+#endif
     {ITT_EFUNC, "NEXT PAGE", CrispyNextPage, 0, MENU_NONE},
     {ITT_EFUNC, "LAST PAGE", CrispyPrevPage, 0, MENU_NONE},
 };
@@ -491,7 +504,7 @@ static Menu_t Crispness1Menu = {
     68, 35,
     DrawCrispnessMenu,
 #ifdef PS3_BUILD
-    14, Crispness1Items,
+    15, Crispness1Items,
 #else
     15, Crispness1Items,
 #endif
@@ -2097,6 +2110,22 @@ static void CrispySoundMono(int option)
 }
 
 #ifdef PS3_BUILD
+// [PS3] Crispness -> Rendering: the 3D view on the RSX or the CPU. Takes
+// effect on the next frame.
+static void PS3Renderer(int option)
+{
+    (void)option;
+    crispy_gpu_renderer = !crispy_gpu_renderer;
+}
+
+static void PS3TexFilter(int option)
+{
+    (void)option;
+
+    if (crispy_gpu_renderer)
+        crispy_gpu_texfilter = !crispy_gpu_texfilter;
+}
+
 // [PS3] Crispness -> Audible -> Music: OPL or a SoundFont (i_ps3music.c)
 static void PS3MusicSynth(int option)
 {
@@ -3464,32 +3493,43 @@ static void DrawCrispness1(void)
 
 #ifdef PS3_BUILD
     // [PS3] Rows are ITEM_HEIGHT/2 = 10px apart starting at
-    // Crispness1Menu.y (35). Dropping smooth scaling moves everything
-    // below it up by 10; gamma then takes the row vsync used to have.
-    // These coordinates track the item array by hand -- nothing derives
-    // them from the index.
+    // Crispness1Menu.y (35). Smooth scaling is gone and the two renderer
+    // lines are in; gamma takes the row vsync used to have, and there is
+    // one blank line less before NEXT PAGE. These coordinates track the
+    // item array by hand -- nothing derives them from the index.
+
+    // Renderer
+    dp_translation = cr[CR_GREEN];
+    MN_DrTextA(crispy_gpu_renderer ? "GPU" : "SOFTWARE",
+               Crispness1Menu.x + MN_TextAWidth("RENDERER:") + 8, 55);
+
+    // Texture filter (GPU renderer only)
+    dp_translation = crispy_gpu_renderer && crispy_gpu_texfilter ? cr[CR_GREEN] : cr[CR_DARK];
+    MN_DrTextA(crispy_gpu_texfilter ? "SMOOTH" : "OFF",
+               Crispness1Menu.x + MN_TextAWidth("TEXTURE FILTER:") + 8, 65);
+    dp_translation = NULL;
 
     // Uncapped framerate
-    DrawCrispnessItem(crispy->uncapped, 217, 55);
+    DrawCrispnessItem(crispy->uncapped, 217, 75);
 
     // Framerate limit
-    DrawCrispnessNumericItem(crispy->fpslimit, 181, 65, "NONE", !crispy->uncapped, "35");
+    DrawCrispnessNumericItem(crispy->fpslimit, 181, 85, "NONE", !crispy->uncapped, "35");
 
     // Gamma correction
     dp_translation = cr[CR_GREEN];
-    MN_DrTextA(ps3_gamma_names[crispy->gamma], 215, 75);
+    MN_DrTextA(ps3_gamma_names[crispy->gamma], 215, 95);
     dp_translation = NULL;
 
-    DrawCrispnessSubheader("VISUAL", 95);
+    DrawCrispnessSubheader("VISUAL", 115);
 
     // Brightmaps
-    DrawCrispnessMultiItem(crispy->brightmaps, 150, 105, multiitem_brightmaps, false);
+    DrawCrispnessMultiItem(crispy->brightmaps, 150, 125, multiitem_brightmaps, false);
 
     // Smooth Diminishing Lighting
-    DrawCrispnessItem(crispy->smoothlight, 257, 115);
+    DrawCrispnessItem(crispy->smoothlight, 257, 135);
 
     // Translucency
-    DrawCrispnessMultiItem(crispy->translucency, 218, 125, multiitem_translucency, false);
+    DrawCrispnessMultiItem(crispy->translucency, 218, 145, multiitem_translucency, false);
 #else
     // Smooth pixel scaling
     DrawCrispnessItem(smooth_pixel_scaling, 216, 55);

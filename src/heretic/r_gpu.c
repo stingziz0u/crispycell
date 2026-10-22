@@ -113,6 +113,12 @@ static void G_FlatScroll(const sector_t *sec, boolean ceiling, float *du, float 
     *dv = FIX2F_G(yoff);
 }
 
+// [crispy] smoother fake contrast
+static int G_FakeContrast(const seg_t *seg)
+{
+    return seg->fakecontrast;
+}
+
 static void G_SubsectorExtra(subsector_t *sub)
 {
     (void)sub;
@@ -164,7 +170,7 @@ static int G_SpriteStyle(vissprite_t *vis, const byte **translation, const byte 
     {
         // the shadow column: through TINTTAB
         *blend = GPU_BLEND_ALPHA;
-        *color = GPU_RGBA(255, 255, 255, 112);
+        *color = GPU_RGBA(255, 255, 255, 142);
     }
     // [crispy] translucent sprites
     else if (!(vis->mobjflags & MF_TRANSLATION) &&
@@ -173,7 +179,7 @@ static int G_SpriteStyle(vissprite_t *vis, const byte **translation, const byte 
               (vis->psprite && crispy->translucency & TRANSLUCENCY_ITEM)))
     {
         *blend = GPU_BLEND_ALPHA;
-        *color = GPU_RGBA(255, 255, 255, 112);
+        *color = GPU_RGBA(255, 255, 255, 142);
     }
 
     if (!vis->colormap[0])
@@ -196,7 +202,7 @@ static void G_DrawSky(void);
 // 320x200 screen whatever the view size.
 static void G_DrawSky(void)
 {
-    DrawSkyLayer(skytexture, FIX2F_G(skytexturemid), FIX2F_G(skyiscale), 0.0f, false, 0);
+    DrawSkyLayer(skytexture, FIX2F_G(skytexturemid), FIX2F_G(skyiscale), 0.0f, TEX_OPAQUE, 0);
 }
 
 #endif // CRISPY_GPU

@@ -57,6 +57,9 @@
 
 #include "s_sound.h"
 #include "i_sound.h" // [PS3] PS3_Music_*
+#ifdef PS3_BUILD
+#include "i_ps3gpu.h" // [PS3] renderer options
+#endif
 
 #include "doomstat.h"
 
@@ -221,6 +224,8 @@ void M_Mouse(int choice); // [crispy] mouse sensitivity menu
 static void M_PS3ToggleGamma(int choice);
 static void M_PS3ScreenFit(int choice);
 static void M_PS3MusicSynth(int choice);
+static void M_PS3ToggleRenderer(int choice);
+static void M_PS3ToggleTexFilter(int choice);
 extern int joystick_look_invert;   // i_ps3joystick.c
 
 // [PS3] Short labels for the 18 gamma levels, dark to light (same as
@@ -457,6 +462,11 @@ enum
     crispness_sep_rendering,
     crispness_hires,
     crispness_widescreen,
+#ifdef PS3_BUILD
+    // [PS3] 1.4: the GPU renderer
+    crispness_renderer,
+    crispness_texfilter,
+#endif
 #ifndef PS3_BUILD
     // [PS3] SDL renderer concepts: the RSX scans out in sync already and
     // the blit is a fixed GPU scale (same as the other three games).
@@ -475,7 +485,10 @@ enum
     crispness_sep_visual,
     crispness_smoothlight,
     crispness_translucency,
+#ifndef PS3_BUILD
+    // [PS3] the two renderer lines took this one's room
     crispness_sep_visual_,
+#endif
 
     crispness1_next,
     crispness1_prev,
@@ -487,6 +500,10 @@ static menuitem_t Crispness1Menu[] =
     {-1, "", 0, '\0'},
     {2, "", M_CrispyToggleHires, 'h'},
     {2, "", M_CrispyToggleWidescreen, 'w'},
+#ifdef PS3_BUILD
+    {2, "", M_PS3ToggleRenderer, 'r'},
+    {2, "", M_PS3ToggleTexFilter, 'x'},
+#endif
 #ifndef PS3_BUILD
     {2, "", M_CrispyToggleSmoothScaling, 's'},
 #endif
@@ -502,7 +519,9 @@ static menuitem_t Crispness1Menu[] =
     {-1, "", 0, '\0'},
     {2, "", M_CrispyToggleSmoothLighting, 's'},
     {3, "", M_CrispyToggleTranslucency, 't'},
+#ifndef PS3_BUILD
     {-1, "", 0, '\0'},
+#endif
     {1, "", M_CrispnessNext, 'n'},
     {1, "", M_CrispnessPrev, 'p'},
 };
@@ -1659,6 +1678,20 @@ static void M_DrawCrispness1(void)
     M_DrawCrispnessNumericItem(crispness_fpslimit, "Framerate Limit", crispy->fpslimit, "None", crispy->uncapped, "35");
 #ifdef PS3_BUILD
     M_snprintf(crispy_menu_text, sizeof(crispy_menu_text),
+               "%sRenderer: %s%s", crstr[CR_NONE], crstr[CR_GREEN],
+               crispy_gpu_renderer ? "GPU" : "Software");
+    M_WriteText(currentMenu->x,
+                currentMenu->y + CRISPY_LINEHEIGHT * crispness_renderer,
+                crispy_menu_text);
+    M_snprintf(crispy_menu_text, sizeof(crispy_menu_text),
+               "%sTexture Filter: %s%s",
+               crispy_gpu_renderer ? crstr[CR_NONE] : crstr[CR_DARK],
+               crispy_gpu_renderer ? crstr[CR_GREEN] : crstr[CR_DARK],
+               crispy_gpu_texfilter ? "Smooth" : "Off");
+    M_WriteText(currentMenu->x,
+                currentMenu->y + CRISPY_LINEHEIGHT * crispness_texfilter,
+                crispy_menu_text);
+    M_snprintf(crispy_menu_text, sizeof(crispy_menu_text),
                "%sGamma Correction: %s%s", crstr[CR_NONE], crstr[CR_GREEN],
                ps3_gamma_names[crispy->gamma]);
     M_WriteText(currentMenu->x,
@@ -2076,6 +2109,22 @@ static void M_PS3ToggleGamma(int choice)
     crispy->gamma = (choice == 0) ? (crispy->gamma + 17) % 18
                                   : (crispy->gamma + 1) % 18;
     I_SetPalette(W_CacheLumpName(DEH_String("PLAYPAL"), PU_CACHE));
+}
+
+// [PS3] Crispness -> Rendering: the 3D view on the RSX or the CPU. Takes
+// effect on the next frame.
+static void M_PS3ToggleRenderer(int choice)
+{
+    (void)choice;
+    crispy_gpu_renderer = !crispy_gpu_renderer;
+}
+
+static void M_PS3ToggleTexFilter(int choice)
+{
+    (void)choice;
+
+    if (crispy_gpu_renderer)
+        crispy_gpu_texfilter = !crispy_gpu_texfilter;
 }
 
 // [PS3] Crispness -> Audible -> Music: OPL or a SoundFont (i_ps3music.c)

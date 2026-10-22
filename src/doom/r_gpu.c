@@ -75,6 +75,12 @@ static void G_FlatScroll(const sector_t *sec, boolean ceiling, float *du, float 
     *du = *dv = 0.0f;
 }
 
+// [crispy] smoother fake contrast
+static int G_FakeContrast(const seg_t *seg)
+{
+    return seg->fakecontrast;
+}
+
 static void G_SubsectorExtra(subsector_t *sub)
 {
     (void)sub;
@@ -177,7 +183,7 @@ static void G_DrawSky(void)
         texmid = texmid * texh / SKYSTRETCH_HEIGHT;
     }
 
-    DrawSkyLayer(skytexture, texmid, iscale, 0.0f, false, 0);
+    DrawSkyLayer(skytexture, texmid, iscale, 0.0f, TEX_OPAQUE, 0);
 }
 
 #endif // CRISPY_GPU

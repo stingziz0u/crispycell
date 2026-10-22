@@ -59,6 +59,7 @@ set(STRIFE_SOURCES
     r_data.c        r_data.h
                     r_defs.h
     r_draw.c        r_draw.h
+    r_gpu.c         r_gpu.h
                     r_local.h
     r_main.c        r_main.h
     r_plane.c       r_plane.h

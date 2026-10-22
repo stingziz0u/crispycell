@@ -22,6 +22,12 @@ Doom (id Software, 1997) -> Chocolate Doom -> Crispy Doom -> CrispyCell (this pr
   with triple buffering. Correct aspect ratio with pillarboxing, plus
   optional 16:10, 16:9 and 21:9 widescreen that widens the field of view
   rather than stretching the picture.
+- **GPU renderer:** the 3D view can be drawn by the RSX instead of the
+  CPU, at 720p, keeping the look of the original renderer: the same
+  palette and light tables (light fading with distance, gun flashes,
+  invulnerability, Hexen's fog), with an optional smooth texture filter.
+  Software or GPU is chosen from the menu and changes at once. See
+  [Renderer](#renderer).
 - **TV Screen Fit:** a setting from 70 % to 100 % that shrinks the picture
   for TVs that crop the edges (overscan), or fills a monitor edge to edge.
 - **Audio:** native 48000 Hz through libaudio. OPL3 music emulation and a
@@ -73,10 +79,10 @@ coexist on the XMB and keep their own savegames and configuration.
 
 | Package | APPID | Installs to |
 |---|---|---|
-| `CrispyDoom-1.3.pkg` | `CRISPDOOM` | `/dev_hdd0/game/CRISPDOOM/USRDIR/` |
-| `CrispyHeretic-1.3.pkg` | `CRISPHERE` | `/dev_hdd0/game/CRISPHERE/USRDIR/` |
-| `CrispyHexen-1.3.pkg` | `CRISPHEX1` | `/dev_hdd0/game/CRISPHEX1/USRDIR/` |
-| `CrispyStrife-1.3.pkg` | `CRISPSTRF` | `/dev_hdd0/game/CRISPSTRF/USRDIR/` |
+| `CrispyDoom-1.4.pkg` | `CRISPDOOM` | `/dev_hdd0/game/CRISPDOOM/USRDIR/` |
+| `CrispyHeretic-1.4.pkg` | `CRISPHERE` | `/dev_hdd0/game/CRISPHERE/USRDIR/` |
+| `CrispyHexen-1.4.pkg` | `CRISPHEX1` | `/dev_hdd0/game/CRISPHEX1/USRDIR/` |
+| `CrispyStrife-1.4.pkg` | `CRISPSTRF` | `/dev_hdd0/game/CRISPSTRF/USRDIR/` |
 
 Install from the XMB, then FTP your WADs into that folder. The launcher
 picks them up on the next boot — no configuration file to edit.
@@ -391,9 +397,32 @@ MIDI, so neither synth applies to it: it always plays as recorded,
 whichever option is chosen, and switching the option does not interrupt
 it. Songs that are MIDI or MUS keep using the chosen synth.
 
+## Renderer
+
+Options -> Crispness -> page 1 (Rendering), in all four games:
+
+- **Renderer: GPU** (the default) draws walls, floors, sprites and the
+  weapon as polygons on the RSX, at the TV's 720p. **Software** is the
+  engine's own column renderer, as in 1.3, at 640x400. The switch takes
+  effect on the next frame, no restart needed.
+- **Texture Filter** (GPU only): **Off** keeps the textures' pixels sharp,
+  as the software renderer shows them; **Smooth** blends neighbouring
+  texels.
+
+The GPU renderer reads the same level data and follows the same rules as
+the software one — texture alignment, the COLORMAP light tables, sky,
+sprite rotations and translations, translucency, brightmaps, free look,
+widescreen — so the picture looks the same, only finer. The status bar,
+HUD, menus and automap are still drawn by the engine as before, over the
+3D view. Screen wipes melt into one frame drawn by the software renderer.
+
+The choices are saved as `ps3_renderer` and `ps3_texture_filter` in the
+game's config file.
+
 ## TV Screen Fit
 
-- Doom and Strife: Options -> Crispness -> page 1 (Rendering).
+- Doom: Options -> Crispness -> page 4 (Display).
+- Strife: Options -> Crispness -> page 1 (Rendering).
 - Heretic and Hexen: Options -> More... -> TV Screen Fit.
 
 It sets how much of the screen the picture may use, from 70 % to 100 % in
@@ -470,8 +499,8 @@ The `ps3/` directory holds everything specific to this port's build:
 - **`build.sh`** — builds and packages one engine end to end:
   `./ps3/build.sh doom`, `heretic`, `hexen` or `strife`. Rewrites
   `appid.mk`, reconfigures, clears the object tree when the engine changes,
-  builds, and packages `Crispy<Game>-1.3.pkg` in the project root.
-  `./ps3/build.sh strife-debug` makes `CrispyStrife-1.3-debug.pkg`, a
+  builds, and packages `Crispy<Game>-1.4.pkg` in the project root.
+  `./ps3/build.sh strife-debug` makes `CrispyStrife-1.4-debug.pkg`, a
   test build of Strife with cheats on the pad: hold L3 + R3 and press
   Triangle (god mode), Square (all weapons and ammo), Cross (next map) or
   Circle (all keys). L3 + R3 + Select, inside a level, starts an

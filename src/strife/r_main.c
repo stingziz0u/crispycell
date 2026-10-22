@@ -38,6 +38,7 @@
 #include "r_sky.h"
 #include "st_stuff.h" // [crispy]
 #include "a11y.h" // [crispy] A11Y
+#include "r_gpu.h" // [PS3]
 
 
 
@@ -1143,6 +1144,16 @@ void R_SetupFrame (player_t* player)
 //
 void R_RenderPlayerView (player_t* player)
 {	
+#ifdef CRISPY_GPU
+    // [PS3] the GPU renderer (the full screen automap keeps the software
+    // BSP walk: it only marks the lines seen, it draws nothing)
+    if (R_GPU_Active() && !(automapactive && !crispy->automapoverlay))
+    {
+        R_GPU_RenderPlayerView(player);
+        return;
+    }
+#endif
+
     R_SetupFrame (player);
 
     // Clear buffers.

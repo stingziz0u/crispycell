@@ -29,6 +29,7 @@
 #include "p_local.h"
 #include "p_rejectpad.h"
 #include "p_mapformat.h"
+#include "r_gpu.h" // [PS3]
 
 // MACROS ------------------------------------------------------------------
 
@@ -976,6 +977,22 @@ void P_SetupLevel(int episode, int map, int playermask, skill_t skill)
     {                           // Probably fog ... don't use fullbright sprites
         LevelUseFullBright = false;
     }
+
+#ifdef CRISPY_GPU
+    // [PS3] the GPU renderer: the new fade table to the RSX, the flat
+    // polygons for this level, and the textures again if their brightmaps
+    // changed (none in fog)
+    {
+        static int last_fullbright = -1;
+
+        if (last_fullbright != LevelUseFullBright)
+        {
+            R_GPU_FlushTextures();
+            last_fullbright = LevelUseFullBright;
+        }
+    }
+    R_GPU_NewLevel();
+#endif
 
 #ifdef CRISPY_TRUECOLOR
     // [crispy] If true color is compiled in but disabled as an option,

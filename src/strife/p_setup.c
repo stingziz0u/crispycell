@@ -23,6 +23,7 @@
 #include "i_ps3debug.h" // [PS3] debug package
 
 #include "p_mapformat.h"
+#include "r_gpu.h" // [PS3]
 #include "z_zone.h"
 
 #include "deh_main.h"
@@ -1022,6 +1023,11 @@ P_SetupLevel
     // preload graphics
     if (precache)
         R_PrecacheLevel ();
+
+#ifdef CRISPY_GPU
+    // [PS3] the GPU renderer's flat polygons for this level
+    R_GPU_NewLevel ();
+#endif
 
     //printf ("free memory: 0x%x\n", Z_FreeMemory());
 }

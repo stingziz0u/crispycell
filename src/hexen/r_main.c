@@ -22,6 +22,7 @@
 #include "p_mapformat.h"
 #include "r_local.h"
 #include "a11y.h" // [crispy] A11Y
+#include "r_gpu.h" // [PS3]
 
 int viewangleoffset;
 
@@ -1061,6 +1062,28 @@ void R_RenderPlayerView(player_t * player)
 {
     extern void PO_InterpolatePolyObjects(void);
     extern boolean automapactive;
+
+#ifdef CRISPY_GPU
+    // [PS3] the GPU renderer (the full screen automap keeps the software
+    // BSP walk: it only marks the lines seen, it draws nothing)
+    if (R_GPU_Active() && !(automapactive && !crispy->automapoverlay))
+    {
+        PO_InterpolatePolyObjects(); // [crispy]
+
+        // Make displayed player invisible locally
+        if (localQuakeHappening[displayplayer] && gamestate == GS_LEVEL)
+        {
+            players[displayplayer].mo->flags2 |= MF2_DONTDRAW;
+            R_GPU_RenderPlayerView(player);
+            players[displayplayer].mo->flags2 &= ~MF2_DONTDRAW;
+        }
+        else
+        {
+            R_GPU_RenderPlayerView(player);
+        }
+        return;
+    }
+#endif
 
     R_SetupFrame(player);
     R_ClearClipSegs();

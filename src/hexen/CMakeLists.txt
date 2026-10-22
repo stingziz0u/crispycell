@@ -44,6 +44,7 @@ add_library(hexen STATIC
             r_bsp.c
             r_data.c
             r_draw.c
+            r_gpu.c             r_gpu.h
                                 r_local.h
             r_main.c
             r_plane.c

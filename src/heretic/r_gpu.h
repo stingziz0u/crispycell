@@ -29,6 +29,9 @@ void R_GPU_RenderPlayerView(player_t *player);
 // a level was loaded (P_SetupLevel)
 void R_GPU_NewLevel(void);
 
+// the textures are made again as they are drawn
+void R_GPU_FlushTextures(void);
+
 // r_things.c: while set, R_DrawVisSprite gives its vissprite to
 // R_GPU_CaptureSprite instead of drawing it (the weapon)
 extern boolean r_gpu_capture;

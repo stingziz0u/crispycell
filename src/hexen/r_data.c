@@ -24,6 +24,7 @@
 #include "r_local.h"
 #include "p_local.h"
 #include "v_trans.h" // [crispy] color translation and color string tables
+#include "r_gpu.h" // [PS3] GPU renderer
 
 typedef struct
 {
@@ -281,6 +282,74 @@ void R_GenerateComposite(int texnum)
 #endif
 }
 
+
+#ifdef CRISPY_GPU
+//
+// [PS3] R_GPU_ComposeTexture
+// The whole texture for the GPU renderer (r_gpu.c): palette indexes and
+// coverage, row by row. Single-patched columns are read straight from
+// their patch, ignoring originy, as R_GetColumn does.
+//
+int R_GPU_TextureWidth(int texnum)
+{
+    return textures[texnum]->width;
+}
+
+void R_GPU_ComposeTexture(int texnum, byte *index, byte *mask)
+{
+    texture_t *texture = textures[texnum];
+    const int w = texture->width, h = texture->height;
+    const short *collump = texturecolumnlump[texnum];
+    texpatch_t *patch;
+    int i;
+
+    memset(index, 0, w * h);
+    memset(mask, 0, w * h);
+
+    for (i = 0, patch = texture->patches; i < texture->patchcount; i++, patch++)
+    {
+        const patch_t *realpatch = W_CacheLumpNum(patch->patch, PU_CACHE);
+        const int x1 = patch->originx;
+        int x, x2 = x1 + SHORT(realpatch->width);
+
+        if (x2 > w)
+            x2 = w;
+
+        for (x = x1 < 0 ? 0 : x1; x < x2; x++)
+        {
+            const column_t *col = (const column_t *)((const byte *)realpatch
+                                    + LONG(realpatch->columnofs[x - x1]));
+            const int originy = collump[x] >= 0 ? 0 : patch->originy;
+            int top = -1;
+
+            while (col->topdelta != 0xff)
+            {
+                const byte *source = (const byte *)col + 3;
+                int y;
+
+                // [crispy] support for DeePsea tall patches
+                if (col->topdelta <= top)
+                    top += col->topdelta;
+                else
+                    top = col->topdelta;
+
+                for (y = 0; y < col->length; y++)
+                {
+                    const int row = originy + top + y;
+
+                    if (row >= 0 && row < h)
+                    {
+                        index[row * w + x] = source[y];
+                        mask[row * w + x] = 1;
+                    }
+                }
+
+                col = (const column_t *)((const byte *)col + col->length + 4);
+            }
+        }
+    }
+}
+#endif
 
 //
 // R_GenerateLookup

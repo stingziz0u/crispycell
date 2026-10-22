@@ -30,6 +30,9 @@
 #include "r_draw.h"
 
 #include "f_wipe.h"
+#ifdef CRISPY_GPU
+#include "i_ps3gpu.h" // [PS3]
+#endif
 
 //
 //                       SCREEN WIPE PACKAGE
@@ -253,6 +256,10 @@ wipe_StartScreen
 {
     wipe_scr_start = Z_Malloc(SCREENWIDTH * SCREENHEIGHT * sizeof(*wipe_scr_start), PU_STATIC, NULL);
     I_ReadScreen(wipe_scr_start);
+#ifdef CRISPY_GPU
+    // [PS3] the GPU renderer's view isn't in the 8 bit screen
+    I_GPU_FixWipeScreen(wipe_scr_start);
+#endif
     return 0;
 }
 

@@ -33,6 +33,7 @@
 
 #include "r_local.h"
 #include "v_trans.h" // [crispy] blending functions
+#include "r_gpu.h" // [PS3]
 
 #include "doomstat.h"
 
@@ -415,6 +416,15 @@ R_DrawVisSprite
     patch_t*            patch;
     int                 clip;   // villsa [STRIFE]
     int                 translation;    // villsa [STRIFE]
+
+#ifdef CRISPY_GPU
+    // [PS3] the GPU renderer draws it (the weapon)
+    if (r_gpu_capture)
+    {
+        R_GPU_CaptureSprite(vis);
+        return;
+    }
+#endif
 
     patch = W_CacheLumpNum (vis->patch+firstspritelump, PU_CACHE);
 

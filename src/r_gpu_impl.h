@@ -48,6 +48,7 @@
 //	  G_MirrorProjection(p)          [crispy] mirrored levels
 //	  G_InterpolateSector(sec)       [AM] the sector's interpolated heights
 //	  G_SwirlFlat(lump)              [crispy] the swirling flat now, or NULL
+//	  G_FakeContrast(seg)            light added to a wall by its direction
 //
 
 #ifdef CRISPY_GPU
@@ -121,7 +122,11 @@ static void SetVert(gpu_vert_t *v, float x, float y, float z, float u, float t,
 // Texture cache
 // ---------------------------------------------------------------------------
 
-static gpu_tex_t **walltex;     // [numtextures * 2]: opaque, masked
+// [numtextures * WALLTEX_KINDS]: opaque; masked by the patches (holes);
+// masked where the index is 0 (the front layer of a double sky)
+#define WALLTEX_KINDS 3
+enum { TEX_OPAQUE, TEX_MASKED, TEX_KEY0 };
+static gpu_tex_t **walltex;
 static int walltex_count;
 static gpu_tex_t **flattex;     // [numflats]
 static int flattex_count;
@@ -155,11 +160,14 @@ static void Scratch(int pixels)
     }
 }
 
+// R_GPU_FlushTextures: what the textures were made from changed
+static boolean textures_stale;
+
 static void FlushTextures(void)
 {
     int i;
 
-    for (i = 0; i < walltex_count * 2; i++)
+    for (i = 0; i < walltex_count * WALLTEX_KINDS; i++)
     {
         GPU_TexFree(walltex[i]);
         walltex[i] = NULL;
@@ -197,12 +205,18 @@ static void CheckTextureCache(void)
         free(flattex);
         free(swirltex);
         free(swirltic);
-        walltex = calloc(numtextures * 2, sizeof(*walltex));
+        walltex = calloc(numtextures * WALLTEX_KINDS, sizeof(*walltex));
         walltex_count = numtextures;
         flattex = calloc(numflats, sizeof(*flattex));
         swirltex = calloc(numflats, sizeof(*swirltex));
         swirltic = calloc(numflats, sizeof(*swirltic));
         flattex_count = numflats;
+    }
+
+    if (textures_stale)
+    {
+        FlushTextures();
+        textures_stale = false;
     }
 
     if (GPU_TexMemUsed() > GPU_TexMemTotal() / 10 * 8)
@@ -231,17 +245,17 @@ static void Brightness(byte *bright, const byte *index, int n, const byte *brigh
 
 // Walls are opaque: where no patch covers a texture, the software
 // renderer draws index 0 (usually black). Only 2s mid textures have holes.
-static gpu_tex_t *WallTextureEx(int texnum, boolean masked)
+static gpu_tex_t *WallTextureEx(int texnum, int kind)
 {
     gpu_tex_t **slot;
-    int w, h;
+    int w, h, i;
 
     if (texnum <= 0 || texnum >= numtextures)
     {
         return NULL;
     }
 
-    slot = &walltex[texnum * 2 + (masked ? 1 : 0)];
+    slot = &walltex[texnum * WALLTEX_KINDS + kind];
 
     if (!*slot)
     {
@@ -250,7 +264,15 @@ static gpu_tex_t *WallTextureEx(int texnum, boolean masked)
         Scratch(w * h);
         R_GPU_ComposeTexture(texnum, scratch_index, scratch_mask);
         Brightness(scratch_bright, scratch_index, w * h, G_TextureBrightmap(texnum));
-        *slot = GPU_TexCreate(w, h, scratch_index, masked ? scratch_mask : NULL, scratch_bright);
+
+        if (kind == TEX_KEY0)
+        {
+            for (i = 0; i < w * h; i++)
+                scratch_mask[i] = scratch_index[i] != 0;
+        }
+
+        *slot = GPU_TexCreate(w, h, scratch_index, kind != TEX_OPAQUE ? scratch_mask : NULL,
+                              scratch_bright);
     }
 
     return *slot;
@@ -258,7 +280,7 @@ static gpu_tex_t *WallTextureEx(int texnum, boolean masked)
 
 static gpu_tex_t *WallTexture(int texnum)
 {
-    return WallTextureEx(texnum, false);
+    return WallTextureEx(texnum, TEX_OPAQUE);
 }
 
 static gpu_tex_t *FlatTexture(int picnum)
@@ -959,7 +981,7 @@ static void AddSeg(seg_t *seg)
     u0 = FIX2F(seg->offset + side->textureoffset);
     u1 = u0 + len;
 
-    light = fixedrow >= 0 ? 0.0f : StartMap(front->rlightlevel, seg->fakecontrast);
+    light = fixedrow >= 0 ? 0.0f : StartMap(front->rlightlevel, G_FakeContrast(seg));
 
     if (!back)
     {
@@ -1034,7 +1056,7 @@ static void AddSeg(seg_t *seg)
     if (side->midtexture)
     {
         int texnum = texturetranslation[side->midtexture];
-        gpu_tex_t *tex = WallTextureEx(texnum, true);
+        gpu_tex_t *tex = WallTextureEx(texnum, TEX_MASKED);
         float textop, texbot, lo, hi;
 
         if (tex)
@@ -1471,10 +1493,11 @@ static void SetOrtho(float w, float h)
 // A sky layer, as the software renderer maps it: a column per view angle
 // (1024 around), rows straight down from the view's center line; only
 // where the sky surfaces marked the stencil.
+// kind: TEX_OPAQUE, or TEX_KEY0 for a layer over another one
 static void DrawSkyLayer(int texnum, float texmid, float iscale, float uoffset,
-                         boolean masked, int fixed)
+                         int kind, int fixed)
 {
-    gpu_tex_t *tex = WallTextureEx(texnum, masked);
+    gpu_tex_t *tex = WallTextureEx(texnum, kind);
     gpu_draw_t d;
     vbuf_t *b = &batch;
     float texw, texh;
@@ -1609,6 +1632,8 @@ static void SetupMatrix(void)
 
 boolean r_gpu_softframe;
 
+static const lighttable_t *colormaps_uploaded;
+
 boolean R_GPU_Active(void)
 {
     return crispy_gpu_renderer && !r_gpu_softframe && I_GPU_Ready();
@@ -1619,6 +1644,14 @@ void R_GPU_NewLevel(void)
     // made on the first frame drawn by the GPU renderer; the textures
     // stay, most are shared between levels
     sspoly_level = NULL;
+
+    // Hexen reads each level's fade table into the same colormaps
+    colormaps_uploaded = NULL;
+}
+
+void R_GPU_FlushTextures(void)
+{
+    textures_stale = true;
 }
 
 void R_GPU_RenderPlayerView(player_t *player)
@@ -1654,14 +1687,10 @@ void R_GPU_RenderPlayerView(player_t *player)
     }
 
     // the colormaps through the palette, for the fragment programs
+    if (colormaps != colormaps_uploaded)
     {
-        static const lighttable_t *uploaded;
-
-        if (colormaps != uploaded)
-        {
-            I_GPU_SetColormaps(colormaps, G_ColormapRows());
-            uploaded = colormaps;
-        }
+        I_GPU_SetColormaps(colormaps, G_ColormapRows());
+        colormaps_uploaded = colormaps;
     }
 
     vx = FIX2F(viewx);

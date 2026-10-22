@@ -24,6 +24,7 @@
 #include "r_local.h"
 #include "v_trans.h" // [crispy] blending functions
 #include "a11y.h" // [crispy] A11Y
+#include "r_gpu.h" // [PS3]
 
 //void R_DrawTranslatedAltTLColumn(void);
 
@@ -395,6 +396,15 @@ void R_DrawVisSprite(vissprite_t * vis, int x1, int x2)
     patch_t *patch;
     fixed_t baseclip;
 
+
+#ifdef CRISPY_GPU
+    // [PS3] the GPU renderer draws it (the weapon)
+    if (r_gpu_capture)
+    {
+        R_GPU_CaptureSprite(vis);
+        return;
+    }
+#endif
 
     patch = W_CacheLumpNum(vis->patch + firstspritelump, PU_CACHE);
 
