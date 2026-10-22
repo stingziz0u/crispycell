@@ -45,6 +45,7 @@
 #include "doomstat.h"
 
 #include "p_mapformat.h" // [crispy] support extended node formats
+#include "r_gpu.h" // [PS3]
 
 void	P_SpawnMapThing (mapthing_t*	mthing);
 
@@ -1396,6 +1397,11 @@ P_SetupLevel
     // preload graphics
     if (precache)
 	R_PrecacheLevel ();
+
+#ifdef CRISPY_GPU
+    // [PS3] the GPU renderer's flat polygons for this level
+    R_GPU_NewLevel ();
+#endif
 
     //printf ("free memory: 0x%x\n", Z_FreeMemory());
 

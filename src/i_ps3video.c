@@ -1,16 +1,10 @@
 //
 // i_ps3video.c -- PS3 native video (RSX) for Crispy Doom.
 //
-// The RSX init/present/shutdown sequence (triple buffering, GPU-
-// accelerated scaled blit via rsxSetTransferScaleSurface, flip
-// handling) is copied near-verbatim from TyrQuakeCell's vid_ps3.c, a
-// confirmed-working reference on real hardware -- not guessed. Only
-// the palette->ARGB conversion and the public I_* entry points are
-// new, adapted to Crispy Doom's contract instead of Quake's vid.h.
-//
-// First-pass resolution: forced classic 320x200, no hires/widescreen
-// yet -- gets something booting before tackling Crispy's runtime
-// resolution options.
+// The public I_* entry points of Crispy Doom's i_video.h. The RSX itself
+// (init, triple buffering, flips) is ps3_gpu.c since 1.4, and the frames
+// are put together by i_ps3gpu.c: the 8 bit screen through the palette,
+// over the GPU renderer's 3D view when there is one.
 //
 
 #include <stdlib.h>
@@ -40,6 +34,9 @@
 #include "v_video.h"
 #include "w_wad.h"
 #include "z_zone.h"
+#include "i_ps3gpu.h"
+#include <stdarg.h>
+#include <stdio.h>
 
 int SCREENWIDTH, SCREENHEIGHT, SCREENHEIGHT_4_3;
 int NONWIDEWIDTH;
@@ -48,30 +45,11 @@ int WIDESCREENDELTA;
 pixel_t *I_VideoBuffer = NULL;
 
 static boolean initialized = false;
-static u32 d_8to24table[256];
 static byte cached_palette[768];
 
-// --- RSX state (copied from vid_ps3.c) ---
-#define PS3_NUM_BUFFERS 3
-
-static void *rsx_io_buffer = NULL;
-static gcmContextData *rsx_context = NULL;
-static u32   rsx_offset[PS3_NUM_BUFFERS];
-static void *rsx_mem[PS3_NUM_BUFFERS];
-static int   rsx_current_buf = 0;
-static int   rsx_display_w   = 0;
-static int   rsx_display_h   = 0;
-static int   rsx_pitch       = 0;
-static boolean rsx_ready     = false;
-
-static volatile u32 rsx_flip_queued = 0;
-static volatile u32 rsx_flip_completed = 0;
-
-static void *rsx_src_mem = NULL;
-static u32   rsx_src_offset = 0;
-static boolean gpu_scale_ready = false;
-
-static u32 *argb_buffer_fallback = NULL; // only used if gpu_scale_ready fails
+// [PS3] The RSX is ps3_gpu.c since 1.4 (i_ps3gpu.c draws the frames):
+// the 8 bit screen goes up through the palette and is scaled by the 3D
+// unit, with the GPU renderer's view under it when there is one.
 
 // [PS3] Share of the display the picture may use, in percent, to make
 // up for TVs that crop the edges (overscan). Settable from the menu
@@ -79,159 +57,35 @@ static u32 *argb_buffer_fallback = NULL; // only used if gpu_scale_ready fails
 // hardwired; 100 fills a monitor edge to edge.
 int ps3_screen_fit = PS3_SCREEN_FIT_DEFAULT;
 
-static void
-PS3_RSX_FlipHandler(const u32 head)
-{
-    (void)head;
-    rsx_flip_completed++;
-}
-
-static void
-PS3_RSX_WaitForFreeBuffer(void)
-{
-    int waited = 0;
-    while ((int)(rsx_flip_queued - rsx_flip_completed) > PS3_NUM_BUFFERS - 2)
-    {
-        sysUsleep(100);
-        if (++waited > 20000)
-        {
-            rsx_flip_completed = rsx_flip_queued;
-            break;
-        }
-    }
-}
-
 extern void PS3_Log(const char *fmt, ...);
 extern void PS3_LogV(const char *fmt, ...);
 extern void PS3_OSK_Update(void);
 
+void PS3_GPU_Log(const char *fmt, ...)
+{
+    char buf[512];
+    va_list args;
+
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    PS3_Log("%s", buf);
+}
+
 void
 PS3_RSX_Init(void)
 {
-    // The launcher brings RSX up before D_DoomMain so it can draw the
-    // WAD picker with no engine available. I_InitGraphics calls this
-    // again afterwards; without the guard that would memalign a second
-    // IO buffer and call rsxInit twice, leaking the first context.
-    if (rsx_ready)
-    {
-        PS3_Log("PS3_RSX_Init: already initialised, skipping");
-        return;
-    }
-
-    PS3_Log("PS3_RSX_Init: start");
-    rsx_io_buffer = memalign(1024 * 1024, 1024 * 1024);
-    if (!rsx_io_buffer)
-        I_Error("PS3 video: memalign failed for RSX IO buffer");
-
-    s32 rc = rsxInit(&rsx_context, 0x10000, 1024 * 1024, rsx_io_buffer);
-    if (rc != 0)
-        I_Error("PS3 video: rsxInit failed: %d", (int)rc);
-
-    videoState vstate;
-    if (videoGetState(0, 0, &vstate) != 0)
-        I_Error("PS3 video: videoGetState failed");
-
-    u8 target_resolution = VIDEO_RESOLUTION_720;
-    videoResolution res;
-    if (videoGetResolution(target_resolution, &res) != 0)
-    {
-        target_resolution = vstate.displayMode.resolution;
-        if (videoGetResolution(target_resolution, &res) != 0)
-            I_Error("PS3 video: videoGetResolution failed");
-    }
-
-    rsx_display_w = res.width;
-    rsx_display_h = res.height;
-    rsx_pitch     = rsx_display_w * 4; // XRGB, 4 bytes/pixel
-
-    videoConfiguration vconfig;
-    memset(&vconfig, 0, sizeof(vconfig));
-    vconfig.resolution = target_resolution;
-    vconfig.format     = VIDEO_BUFFER_FORMAT_XRGB;
-    vconfig.pitch      = rsx_pitch;
-    if (videoConfigure(0, &vconfig, NULL, 1) != 0)
-        I_Error("PS3 video: videoConfigure failed");
-
-    videoState wait_state;
-    do
-    {
-        sysUsleep(10000);
-        if (videoGetState(0, 0, &wait_state) != 0)
-            break;
-    } while (wait_state.state == 3);
-
-    gcmSetFlipMode(GCM_FLIP_VSYNC);
-
-    for (int i = 0; i < PS3_NUM_BUFFERS; i++)
-    {
-        rsx_mem[i] = rsxMemalign(64, rsx_pitch * rsx_display_h);
-        if (!rsx_mem[i])
-            I_Error("PS3 video: rsxMemalign failed for buffer %d", i);
-        rsxAddressToOffset(rsx_mem[i], &rsx_offset[i]);
-        gcmSetDisplayBuffer(i, rsx_offset[i], rsx_pitch,
-                             rsx_display_w, rsx_display_h);
-    }
-
-    rsx_flip_queued = 0;
-    rsx_flip_completed = 0;
-    gcmSetFlipHandler(PS3_RSX_FlipHandler);
-    rsx_current_buf = 0;
-
-    // Size for the widest render the engine can ever ask for, not for
-    // whatever SCREENWIDTH happens to hold right now: the launcher pins
-    // it to 640 before this runs, and switching to 21:9 later takes it
-    // to 1120. PS3_RSX_Present memcpys src_w * src_h * 4 into here, so
-    // an undersized buffer is an out-of-bounds write, not a glitch.
-    // MAXWIDTH is ORIGWIDTH << 2 = 1280; at 4 bytes and 400 lines that
-    // is 2 MiB, which is nothing next to the 256 MiB the console has.
-    u32 src_pitch = MAXWIDTH * 4;
-    rsx_src_mem = rsxMemalign(64, src_pitch * (ORIGHEIGHT << 1));
-    if (rsx_src_mem)
-    {
-        rsxAddressToOffset(rsx_src_mem, &rsx_src_offset);
-    }
-    gpu_scale_ready = (rsx_src_mem != NULL);
-
-    if (!gpu_scale_ready)
-    {
-        argb_buffer_fallback = malloc(SCREENWIDTH * SCREENHEIGHT * sizeof(u32));
-        if (!argb_buffer_fallback)
-            I_Error("PS3 video: failed to allocate CPU fallback ARGB buffer");
-    }
-
-    rsx_ready = true;
-    PS3_Log("PS3_RSX_Init: complete, gpu_scale_ready=%d", gpu_scale_ready);
+    // The launcher brings the RSX up before D_DoomMain so it can draw the
+    // WAD picker with no engine available; I_InitGraphics calls this
+    // again afterwards. GPU_Init is idempotent.
+    if (GPU_Init() != 0)
+        I_Error("PS3 video: the RSX didn't start (see the log)");
 }
 
 static void
 PS3_RSX_Shutdown(void)
 {
-    if (!rsx_ready)
-        return;
-
-    gcmSetFlipHandler(NULL);
-    for (int i = 0; i < PS3_NUM_BUFFERS; i++)
-    {
-        if (rsx_mem[i])
-        {
-            rsxFree(rsx_mem[i]);
-            rsx_mem[i] = NULL;
-        }
-    }
-    if (rsx_src_mem)
-    {
-        rsxFree(rsx_src_mem);
-        rsx_src_mem = NULL;
-    }
-    if (rsx_io_buffer)
-    {
-        free(rsx_io_buffer);
-        rsx_io_buffer = NULL;
-    }
-    free(argb_buffer_fallback);
-    argb_buffer_fallback = NULL;
-
-    rsx_ready = false;
+    GPU_Shutdown();
 }
 
 // The launcher's way out to the XMB (i_ps3launcher.c): it brought RSX
@@ -242,109 +96,14 @@ PS3_RSX_Release(void)
     PS3_RSX_Shutdown();
 }
 
+// The launcher's 32 bit picture. Its lines are square pixels until the
+// engine's aspect correction is known.
 void
 PS3_RSX_Present(const u32 *src, int src_w, int src_h)
 {
-    if (!rsx_ready)
-        return;
+    int aspect_h = (SCREENHEIGHT_4_3 > 0 && src_h == SCREENHEIGHT) ? SCREENHEIGHT_4_3 : src_h;
 
-    PS3_RSX_WaitForFreeBuffer();
-
-    int next = rsx_current_buf;
-    u32 *dst = (u32 *)rsx_mem[next];
-
-    // Fit the source into the safe area at its true aspect ratio,
-    // rather than stretching it to fill. The engine renders with
-    // non-square pixels: 400 lines stand for SCREENHEIGHT_4_3 (480 when
-    // aspect correction is on), so the picture a 640x400 buffer
-    // represents is 4:3, and a 852x400 widescreen buffer is 16:9.
-    // Blitting either into a fixed 16:9 box was stretching the 4:3 case
-    // about a third too wide.
-    int fit = BETWEEN(PS3_SCREEN_FIT_MIN, PS3_SCREEN_FIT_MAX, ps3_screen_fit);
-    int max_w = rsx_display_w * fit / 100;
-    int max_h = rsx_display_h * fit / 100;
-    int aspect_h = (SCREENHEIGHT_4_3 > 0) ? SCREENHEIGHT_4_3 : src_h;
-    int out_w, out_h, off_x, off_y;
-
-    // Pick whichever dimension runs out first, so the result is
-    // pillarboxed on a 4:3 render and letterboxed if a source is ever
-    // wider than the display.
-    out_w = max_w;
-    out_h = (int)((long long) out_w * aspect_h / src_w);
-
-    if (out_h > max_h)
-    {
-        out_h = max_h;
-        out_w = (int)((long long) out_h * src_w / aspect_h);
-    }
-
-    off_x = (rsx_display_w - out_w) / 2;
-    off_y = (rsx_display_h - out_h) / 2;
-
-    // Clear every frame now: with pillarboxing the bars are real
-    // screen area, and a resolution or aspect change mid-game would
-    // otherwise leave the old image framing the new one.
-    memset(dst, 0, rsx_pitch * rsx_display_h);
-
-    if (gpu_scale_ready)
-    {
-        if (src != (const u32 *)rsx_src_mem)
-            memcpy(rsx_src_mem, src, src_w * src_h * 4);
-
-        gcmTransferScale scale;
-        memset(&scale, 0, sizeof(scale));
-        scale.conversion = GCM_TRANSFER_CONVERSION_TRUNCATE;
-        scale.format     = GCM_TRANSFER_SCALE_FORMAT_A8R8G8B8;
-        scale.operation  = GCM_TRANSFER_OPERATION_SRCCOPY;
-        scale.clipX = off_x;
-        scale.clipY = off_y;
-        scale.clipW = out_w;
-        scale.clipH = out_h;
-        scale.outX  = off_x;
-        scale.outY  = off_y;
-        scale.outW  = out_w;
-        scale.outH  = out_h;
-        scale.ratioX = rsxGetFixedSint32((float)src_w / (float)out_w);
-        scale.ratioY = rsxGetFixedSint32((float)src_h / (float)out_h);
-        scale.inW    = src_w;
-        scale.inH    = src_h;
-        scale.pitch  = src_w * 4;
-        scale.origin = GCM_TRANSFER_ORIGIN_CORNER;
-        scale.interp = GCM_TRANSFER_INTERPOLATOR_NEAREST;
-        scale.offset = rsx_src_offset;
-        scale.inX = 0;
-        scale.inY = 0;
-
-        gcmTransferSurface surface;
-        memset(&surface, 0, sizeof(surface));
-        surface.format = GCM_TRANSFER_SURFACE_FORMAT_A8R8G8B8;
-        surface.pitch  = rsx_pitch;
-        surface.offset = rsx_offset[next];
-
-        rsxSetTransferScaleSurface(rsx_context, &scale, &surface);
-    }
-    else
-    {
-        // CPU nearest-neighbour fallback, only if the RSX source
-        // buffer failed to allocate at init.
-        for (int y = 0; y < out_h; y++)
-        {
-            int sy = (y * src_h) / out_h;
-            const u32 *sr = src + (sy * src_w);
-            u32       *dr = dst + ((y + off_y) * rsx_display_w) + off_x;
-            for (int x = 0; x < out_w; x++)
-            {
-                dr[x] = sr[(x * src_w) / out_w];
-            }
-        }
-    }
-
-    gcmSetFlip(rsx_context, next);
-    rsxFlushBuffer(rsx_context);
-    gcmSetWaitFlip(rsx_context);
-
-    rsx_flip_queued++;
-    rsx_current_buf = (rsx_current_buf + 1) % PS3_NUM_BUFFERS;
+    I_GPU_Present32(src, src_w, src_h, src_w, aspect_h);
 }
 
 // --- Crispy Doom i_video.h contract ---
@@ -435,6 +194,7 @@ void I_SetGammaTable(void)
 
 typedef struct { byte r, g, b, a; } ps3color_t;
 static ps3color_t palette[256];
+static byte gpu_palette[768];
 
 void I_SetPalette(byte *doompalette)
 {
@@ -449,13 +209,12 @@ void I_SetPalette(byte *doompalette)
         palette[i].g = gamma2table[crispy->gamma][*doompalette++] & ~3;
         palette[i].b = gamma2table[crispy->gamma][*doompalette++] & ~3;
 
-        // PS3 is big-endian: 0xAARRGGBB as a u32 literally matches
-        // memory byte order [A][R][G][B], which is what
-        // VIDEO_BUFFER_FORMAT_XRGB expects (same reasoning as
-        // TyrQuakeCell's VID_SetPalette).
-        d_8to24table[i] = ((u32)palette[i].a << 24) | ((u32)palette[i].r << 16)
-                        | ((u32)palette[i].g << 8) | (u32)palette[i].b;
+        gpu_palette[i * 3] = palette[i].r;
+        gpu_palette[i * 3 + 1] = palette[i].g;
+        gpu_palette[i * 3 + 2] = palette[i].b;
     }
+
+    I_GPU_SetPalette(gpu_palette);
 }
 
 // Given an RGB value, find the closest matching palette index.
@@ -556,9 +315,10 @@ void I_ReInitGraphics(int reinit)
     // the aspect ratio or high-resolution rendering. Only the
     // framebuffer half of upstream's version applies here: everything
     // it does under REINIT_RENDERER and REINIT_TEXTURES is SDL surface
-    // and texture juggling. RSX needs nothing -- rsx_src_mem is sized
-    // for MAXWIDTH up front, and PS3_RSX_Present takes every dimension
-    // from its parameters, so a wider render just works.
+    // and texture juggling. RSX needs nothing -- ps3_gpu.c's screen
+    // images are sized for MAXWIDTH up front, and i_ps3gpu.c takes every
+    // dimension from SCREENWIDTH/SCREENHEIGHT, so a wider render just
+    // works.
     if (reinit & REINIT_FRAMEBUFFERS)
     {
         byte *newbuffer;
@@ -615,27 +375,7 @@ void I_FinishUpdate(void)
     if (!initialized)
         return;
 
-    u32 *convert_dst = gpu_scale_ready ? (u32 *)rsx_src_mem : argb_buffer_fallback;
-
-    for (int y = 0; y < SCREENHEIGHT; y++)
-    {
-        const byte *src = I_VideoBuffer + y * SCREENWIDTH;
-        u32        *dst = convert_dst + y * SCREENWIDTH;
-        int x = 0;
-        for (; x + 4 <= SCREENWIDTH; x += 4)
-        {
-            dst[x + 0] = d_8to24table[src[x + 0]];
-            dst[x + 1] = d_8to24table[src[x + 1]];
-            dst[x + 2] = d_8to24table[src[x + 2]];
-            dst[x + 3] = d_8to24table[src[x + 3]];
-        }
-        for (; x < SCREENWIDTH; x++)
-        {
-            dst[x] = d_8to24table[src[x]];
-        }
-    }
-
-    PS3_RSX_Present(convert_dst, SCREENWIDTH, SCREENHEIGHT);
+    I_GPU_Present(I_VideoBuffer);
 }
 
 void I_UpdateNoBlit(void)
@@ -669,6 +409,8 @@ void I_DisplayFPSDots(boolean dots_on)
 void I_BindVideoVariables(void)
 {
     M_BindIntVariable("ps3_screen_fit", &ps3_screen_fit);
+    M_BindIntVariable("ps3_renderer", &crispy_gpu_renderer);
+    M_BindIntVariable("ps3_texture_filter", &crispy_gpu_texfilter);
 }
 
 void I_InitWindowTitle(void)

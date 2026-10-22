@@ -43,6 +43,8 @@ if(PS3_BUILD)
     add_library(SDL2::SDL2 INTERFACE IMPORTED)
     add_library(SDL2::SDL2main INTERFACE IMPORTED)
     add_compile_definitions(PS3_BUILD=1)
+    # [PS3] the GPU renderer (r_gpu.c) on the RSX (ps3_gpu.c)
+    add_compile_definitions(CRISPY_GPU=1)
 
     # Read the package identity from ps3/appid.mk, the same file
     # Makefile.crispypkg includes, so the paths compiled into the binary

@@ -1752,6 +1752,19 @@ static default_t extra_defaults_list[] =
     CONFIG_VARIABLE_INT(ps3_screen_fit),
 
     //!
+    // [PS3] Renderer of the 3D view: 1 the GPU (RSX), 0 software.
+    //
+
+    CONFIG_VARIABLE_INT(ps3_renderer),
+
+    //!
+    // [PS3] GPU renderer: 1 filters the textures (smooth), 0 keeps the
+    // pixels sharp as the software renderer.
+    //
+
+    CONFIG_VARIABLE_INT(ps3_texture_filter),
+
+    //!
     // [PS3] Music synth: the .sf2 in USRDIR/soundfonts/ to play the music
     // with, or empty for the original OPL.
     //

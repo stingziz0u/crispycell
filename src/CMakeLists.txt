@@ -91,6 +91,8 @@ set(GAME_SOURCE_FILES
     i_truecolor.c       i_truecolor.h
     i_video.c           i_video.h
     i_ps3video.c
+    i_ps3gpu.c          i_ps3gpu.h
+    ps3_gpu.c           ps3_gpu.h
     i_ps3sound.c
     i_ps3launcher.c
     i_ps3music.c
@@ -166,7 +168,7 @@ if(PS3_BUILD)
     # resolution at link time (undefined reference to videoGetState etc,
     # appearing/disappearing depending on whether PS3_RSX_Init got
     # inlined into I_InitGraphics). Build this one file at -O1.
-    set_source_files_properties(i_ps3video.c PROPERTIES COMPILE_OPTIONS "-O1;-fno-inline")
+    set_source_files_properties(i_ps3video.c ps3_gpu.c PROPERTIES COMPILE_OPTIONS "-O1;-fno-inline")
     if(PS3_DEBUG)
         # [PS3] Debug package: the shared code the game thread runs most
         # also goes into the function trace (i_ps3debug.c).

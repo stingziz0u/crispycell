@@ -63,6 +63,9 @@
 #include "sounds.h"
 
 #include "m_menu.h"
+#ifdef PS3_BUILD
+#include "i_ps3gpu.h" // [PS3] renderer options
+#endif
 #include "m_crispy.h" // [crispy] Crispness menu
 
 #include "v_trans.h" // [crispy] colored "invert mouse" message
@@ -270,6 +273,8 @@ static void M_DrawOptions(void);
 #ifdef PS3_BUILD
 static void M_PS3ScreenFit(int choice);
 static void M_PS3MusicSynth(int choice);
+static void M_PS3ToggleRenderer(int choice);
+static void M_PS3ToggleTexFilter(int choice);
 #endif
 static void M_DrawMouse(void); // [crispy] mouse sensitivity menu
 static void M_DrawSound(void);
@@ -506,8 +511,8 @@ enum
     crispness_uncapped,
     crispness_fpslimit,
 #ifdef PS3_BUILD
-    crispness_gamma,
-    crispness_screenfit,
+    crispness_renderer,
+    crispness_texfilter,
 #endif
 #ifndef PS3_BUILD
     // [PS3] RSX drives the scanout directly and the blit is a fixed GPU
@@ -539,10 +544,9 @@ static menuitem_t Crispness1Menu[]=
     {3,"",	M_CrispyToggleUncapped,'u'},
     {4,"",	M_CrispyToggleFpsLimit,'f'},
 #ifdef PS3_BUILD
-    {3,"",	M_CrispyToggleGamma,'g'},
-    // [PS3] Kept out of Options: one more slider there pushed Crispness
-    // into the status bar. Status 2 = slider (left/right, cross = right).
-    {2,"",	M_PS3ScreenFit,'t'},
+    // [PS3] 1.4: the GPU renderer (gamma and TV Screen Fit went to 4/4)
+    {3,"",	M_PS3ToggleRenderer,'r'},
+    {3,"",	M_PS3ToggleTexFilter,'t'},
 #endif
 #ifndef PS3_BUILD
     {3,"",	M_CrispyToggleVsync,'v'},
@@ -702,6 +706,13 @@ enum
     crispness_demousetimer,
     crispness_sep_demos_,
 
+#ifdef PS3_BUILD
+    crispness_sep_display,
+    crispness_gamma,
+    crispness_screenfit,
+    crispness_sep_display_,
+#endif
+
     crispness4_next,
     crispness4_prev,
     crispness4_end
@@ -721,6 +732,14 @@ static menuitem_t Crispness4Menu[]=
     {3,"",	M_CrispyToggleDemoBar,'w'},
     {3,"",	M_CrispyToggleDemoUseTimer,'u'},
     {-1,"",0,'\0'},
+#ifdef PS3_BUILD
+    {-1,"",0,'\0'},
+    {3,"",	M_CrispyToggleGamma,'g'},
+    // [PS3] Kept out of Options: one more slider there pushed Crispness
+    // into the status bar. Status 2 = slider (left/right, cross = right).
+    {2,"",	M_PS3ScreenFit,'t'},
+    {-1,"",0,'\0'},
+#endif
     {1,"",	M_CrispnessNext,'n'},
     {1,"",	M_CrispnessPrev,'p'},
 };
@@ -1516,6 +1535,22 @@ static void M_PS3MusicSynth(int choice)
     PS3_Music_CycleSynth(choice == 0 ? -1 : 1);
 }
 
+// [PS3] Crispness -> Rendering: the 3D view on the RSX or the CPU. Takes
+// effect on the next frame.
+static void M_PS3ToggleRenderer(int choice)
+{
+    (void)choice;
+    crispy_gpu_renderer = !crispy_gpu_renderer;
+}
+
+static void M_PS3ToggleTexFilter(int choice)
+{
+    (void)choice;
+
+    if (crispy_gpu_renderer)
+        crispy_gpu_texfilter = !crispy_gpu_texfilter;
+}
+
 static void M_PS3ScreenFit(int choice)
 {
     switch (choice)
@@ -1697,17 +1732,19 @@ static void M_DrawCrispness1(void)
     M_DrawCrispnessNumericItem(crispness_fpslimit, "Framerate Limit", crispy->fpslimit, "None", crispy->uncapped, "35");
 #ifdef PS3_BUILD
     M_snprintf(crispy_menu_text, sizeof(crispy_menu_text),
-               "%sGamma Correction: %s%s", crstr[CR_NONE], crstr[CR_GREEN],
-               ps3_gamma_names[crispy->gamma]);
+               "%sRenderer: %s%s", crstr[CR_NONE], crstr[CR_GREEN],
+               crispy_gpu_renderer ? "GPU" : "Software");
     M_WriteText(currentMenu->x,
-                currentMenu->y + CRISPY_LINEHEIGHT * crispness_gamma,
+                currentMenu->y + CRISPY_LINEHEIGHT * crispness_renderer,
                 crispy_menu_text);
 
     M_snprintf(crispy_menu_text, sizeof(crispy_menu_text),
-               "%sTV Screen Fit: %s%d%%", crstr[CR_NONE], crstr[CR_GREEN],
-               ps3_screen_fit);
+               "%sTexture Filter: %s%s",
+               crispy_gpu_renderer ? crstr[CR_NONE] : crstr[CR_DARK],
+               crispy_gpu_renderer ? crstr[CR_GREEN] : crstr[CR_DARK],
+               crispy_gpu_texfilter ? "Smooth" : "Off");
     M_WriteText(currentMenu->x,
-                currentMenu->y + CRISPY_LINEHEIGHT * crispness_screenfit,
+                currentMenu->y + CRISPY_LINEHEIGHT * crispness_texfilter,
                 crispy_menu_text);
 #endif
 
@@ -1812,6 +1849,24 @@ static void M_DrawCrispness4(void)
     M_DrawCrispnessMultiItem(crispness_demotimerdir, "Playback Timer Direction", multiitem_demotimerdir, crispy->demotimerdir + 1, crispy->demotimer & DEMOTIMER_PLAYBACK);
     M_DrawCrispnessItem(crispness_demobar, "Show Demo Progress Bar", crispy->demobar, true);
     M_DrawCrispnessItem(crispness_demousetimer, "\"Use\" Button Timer", crispy->btusetimer, true);
+
+#ifdef PS3_BUILD
+    M_DrawCrispnessSeparator(crispness_sep_display, "Display");
+
+    M_snprintf(crispy_menu_text, sizeof(crispy_menu_text),
+               "%sGamma Correction: %s%s", crstr[CR_NONE], crstr[CR_GREEN],
+               ps3_gamma_names[crispy->gamma]);
+    M_WriteText(currentMenu->x,
+                currentMenu->y + CRISPY_LINEHEIGHT * crispness_gamma,
+                crispy_menu_text);
+
+    M_snprintf(crispy_menu_text, sizeof(crispy_menu_text),
+               "%sTV Screen Fit: %s%d%%", crstr[CR_NONE], crstr[CR_GREEN],
+               ps3_screen_fit);
+    M_WriteText(currentMenu->x,
+                currentMenu->y + CRISPY_LINEHEIGHT * crispness_screenfit,
+                crispy_menu_text);
+#endif
 
     M_DrawCrispnessGoto(crispness4_next, "First Page >");
     M_DrawCrispnessGoto(crispness4_prev, "< Prev Page");

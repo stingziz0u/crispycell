@@ -11,8 +11,10 @@
 #
 # Rewrites ps3/appid.mk, reconfigures cmake so the per-game defines are
 # picked up, builds, and packages -- in that order, with set -e, so a
-# failed build can never leave a .pkg made from the previous binary.
+# failed build can never leave a .pkg made from the previous binary
+# (pipefail: the "| tail" below would otherwise hide a failed make).
 set -e
+set -o pipefail
 
 GAME="$1"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -75,7 +77,7 @@ rm -rf build "crispy-$GAME.self" "crispy-$GAME.pkg" \
        "crispy-$GAME.gnpdrm.pkg" "crispy-$GAME.fake.self"
 cp "crispy-$GAME" "crispy-$GAME.elf"
 make -f ../../Makefile.crispypkg 2>&1 | tail -2
-PKG="Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.3$SUFFIX.pkg"
+PKG="Crispy$(tr a-z A-Z <<< "${GAME:0:1}")${GAME:1}-1.4$SUFFIX.pkg"
 cp "crispy-$GAME.gnpdrm.pkg" "$ROOT/$PKG"
 
 # The debug package's crash dump has function addresses: they are named

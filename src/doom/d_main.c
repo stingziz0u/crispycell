@@ -75,6 +75,7 @@
 
 #include "p_setup.h"
 #include "r_local.h"
+#include "r_gpu.h" // [PS3]
 #include "statdump.h"
 
 #include "d_main.h"
@@ -208,6 +209,12 @@ boolean D_Display (void)
     }
     else
 	wipe = false;
+
+#ifdef CRISPY_GPU
+    // [PS3] the screen a wipe melts into must have the view in it: the
+    // software renderer draws that one frame
+    r_gpu_softframe = wipe;
+#endif
 
     if (gamestate == GS_LEVEL && gametic)
 	HU_Erase();
