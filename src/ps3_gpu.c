@@ -114,7 +114,7 @@ static u32 pal32[256];
 /* programs */
 static rsxVertexProgram *vp;
 static void *vp_ucode;
-static rsxProgramConst *vp_mvp, *vp_params, *vp_texinfo;
+static rsxProgramConst *vp_mvp, *vp_params, *vp_texinfo, *vp_params2;
 
 enum { FP_WORLD, FP_SMOOTH, FP_RGBA, FP_COLOR, FP_COUNT };
 
@@ -127,8 +127,8 @@ static int st_valid;
 static int st_fp;
 static gpu_tex_t *st_tex;
 static int st_blend, st_dtest, st_dwrite, st_cwrite, st_stencil;
-static float st_params[4], st_texinfo[4];
-static int st_params_ok, st_texinfo_ok;
+static float st_params[4], st_texinfo[4], st_params2[4];
+static int st_params_ok, st_texinfo_ok, st_params2_ok;
 static int lut_bound;
 
 static int perf_log;
@@ -617,8 +617,9 @@ LoadPrograms(void)
 	vp_mvp = rsxVertexProgramGetConst(vp, "mvp");
 	vp_params = rsxVertexProgramGetConst(vp, "params");
 	vp_texinfo = rsxVertexProgramGetConst(vp, "texinfo");
+	vp_params2 = rsxVertexProgramGetConst(vp, "params2");
 
-	if (!vp_ucode || !vp_mvp || !vp_params || !vp_texinfo)
+	if (!vp_ucode || !vp_mvp || !vp_params || !vp_texinfo || !vp_params2)
 	{
 		PS3_GPU_Log("[gpu] FATAL: vertex program constants missing");
 		return -1;
@@ -1318,6 +1319,7 @@ GPU_BeginFrame(void)
 	st_fp = -1;
 	st_params_ok = 0;
 	st_texinfo_ok = 0;
+	st_params2_ok = 0;
 	SetFP(FP_COLOR);
 	st_valid = 1;
 }
@@ -1360,7 +1362,7 @@ GPU_DrawTris(const gpu_draw_t *d, const gpu_vert_t *v, int n)
 {
 	gpu_vert_t *dst;
 	u32 off;
-	float params[4], texinfo[4];
+	float params[4], texinfo[4], params2[4];
 
 	if (!ready || !in_frame || n < 3)
 	{
@@ -1402,8 +1404,11 @@ GPU_DrawTris(const gpu_draw_t *d, const gpu_vert_t *v, int n)
 		texinfo[1] = (float)d->tex->h;
 		texinfo[2] = 1.0f / d->tex->w;
 		texinfo[3] = 1.0f / d->tex->h;
+		params2[0] = d->zstep;
+		params2[1] = params2[2] = params2[3] = 0.0f;
 		SetVec(vp_params, st_params, &st_params_ok, params);
 		SetVec(vp_texinfo, st_texinfo, &st_texinfo_ok, texinfo);
+		SetVec(vp_params2, st_params2, &st_params2_ok, params2);
 	}
 	else
 	{

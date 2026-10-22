@@ -25,6 +25,7 @@
 #include "m_argv.h"
 #include "m_bbox.h"
 #include "p_local.h"
+#include "r_gpu.h" // [PS3]
 #include "p_rejectpad.h"
 #include "s_sound.h"
 #include "p_mapformat.h"
@@ -951,6 +952,11 @@ void P_SetupLevel(int episode, int map, int playermask, skill_t skill)
 // preload graphics
     if (precache)
         R_PrecacheLevel();
+
+#ifdef CRISPY_GPU
+    // [PS3] the GPU renderer's flat polygons for this level
+    R_GPU_NewLevel();
+#endif
 
 //printf ("free memory: 0x%x\n", Z_FreeMemory());
 

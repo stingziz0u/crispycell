@@ -14,6 +14,7 @@
 #define __R_GPU__
 
 #include "d_player.h"
+#include "r_defs.h"
 
 #ifdef CRISPY_GPU
 
@@ -27,6 +28,11 @@ void R_GPU_RenderPlayerView(player_t *player);
 
 // a level was loaded (P_SetupLevel)
 void R_GPU_NewLevel(void);
+
+// r_things.c: while set, R_DrawVisSprite gives its vissprite to
+// R_GPU_CaptureSprite instead of drawing it (the weapon)
+extern boolean r_gpu_capture;
+void R_GPU_CaptureSprite(vissprite_t *vis);
 
 // r_data.c: a wall texture as palette indexes and coverage, w x h row by
 // row, composed from its patches with the software renderer's rules

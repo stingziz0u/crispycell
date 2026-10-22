@@ -20,6 +20,7 @@
 #include "doomdef.h"
 #include "m_bbox.h"
 #include "r_local.h"
+#include "r_gpu.h" // [PS3]
 #include "tables.h"
 #include "v_video.h" // [crispy] V_DrawFilledBox for HOM detector
 #include "a11y.h" // [crispy] A11Y
@@ -1049,6 +1050,16 @@ void R_SetupFrame(player_t * player)
 void R_RenderPlayerView(player_t * player)
 {
     extern boolean automapactive;
+
+#ifdef CRISPY_GPU
+    // [PS3] the GPU renderer (the full screen automap keeps the software
+    // BSP walk: it only marks the lines seen, it draws nothing)
+    if (R_GPU_Active() && !(automapactive && !crispy->automapoverlay))
+    {
+        R_GPU_RenderPlayerView(player);
+        return;
+    }
+#endif
 
     R_SetupFrame(player);
     R_ClearClipSegs();

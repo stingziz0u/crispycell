@@ -32,6 +32,7 @@
 #include "w_wad.h"
 
 #include "r_local.h"
+#include "r_gpu.h" // [PS3]
 
 #include "doomstat.h"
 
@@ -476,6 +477,14 @@ R_DrawVisSprite
     fixed_t		frac;
     patch_t*		patch;
 	
+#ifdef CRISPY_GPU
+    // [PS3] the GPU renderer draws it (the weapon)
+    if (r_gpu_capture)
+    {
+	R_GPU_CaptureSprite(vis);
+	return;
+    }
+#endif
 	
     patch = W_CacheLumpNum (vis->patch+firstspritelump, PU_CACHE);
 

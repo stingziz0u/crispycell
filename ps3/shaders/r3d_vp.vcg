@@ -11,6 +11,7 @@
  *          programs); tc1.y its darkest colormap row
  *   params (fixed colormap row or -1, light "visibility", cap, wrap)
  *   texinfo (width, height, 1 / width, 1 / height) of texture unit 0
+ *   params2 (depth step, 0, 0, 0): see r3d_common.cgh
  */
 
 void main(
@@ -22,13 +23,15 @@ void main(
     uniform float4x4 mvp,
     uniform float4 params,
     uniform float4 texinfo,
+    uniform float4 params2,
 
     out float4 oPosition : POSITION,
     out float4 oColor    : COLOR0,
     out float2 oTc0      : TEXCOORD0,
     out float4 oTc1      : TEXCOORD1,
     out float4 oTc2      : TEXCOORD2,
-    out float4 oTc3      : TEXCOORD3
+    out float4 oTc3      : TEXCOORD3,
+    out float4 oTc4      : TEXCOORD4
 )
 {
     float4 p = mul(mvp, position);
@@ -39,4 +42,5 @@ void main(
     oTc1      = float4(tc1.x, tc1.y, p.w, 0.0);   /* p.w = depth in view space */
     oTc2      = params;
     oTc3      = texinfo;
+    oTc4      = params2;
 }

@@ -93,6 +93,7 @@ typedef struct
 	float fixed_row;
 	float vis;
 	float cap;
+	float zstep;          /* > 0: depth rounded up to steps of this first */
 } gpu_draw_t;
 
 /* ---- display ---- */
