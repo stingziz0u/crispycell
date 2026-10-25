@@ -132,6 +132,77 @@ static int st_params_ok, st_texinfo_ok, st_params2_ok;
 static int lut_bound;
 
 static int perf_log;
+
+#ifdef PS3_GPU_TRACE
+/* PS3_GPU_TRACE: the programs the RSX got, and every 600 frames the
+   first draws of one frame with what goes with them, in the log */
+static float tr_mvp[16];
+static int tr_frame, tr_draws;
+
+static void
+TraceVertexProgram(void)
+{
+	rsxProgramConst *c = rsxVertexProgramGetConsts(vp);
+	int i;
+
+	PS3_GPU_Log("[trace] vp: regs %u attr %u const %u insn %u in %08x out %08x cstart %u istart %u",
+			vp->num_regs, vp->num_attr, vp->num_const, vp->num_insn,
+			vp->input_mask, vp->output_mask, vp->const_start, vp->insn_start);
+
+	for (i = 0; i < vp->num_const; i++)
+	{
+		PS3_GPU_Log("[trace] vp const %d: index %u type %u internal %u count %u",
+				i, c[i].index, c[i].type, c[i].is_internal, c[i].count);
+	}
+
+	PS3_GPU_Log("[trace] vp consts found: mvp %d params %d texinfo %d params2 %d",
+			vp_mvp ? (int)vp_mvp->index : -1, vp_params ? (int)vp_params->index : -1,
+			vp_texinfo ? (int)vp_texinfo->index : -1, vp_params2 ? (int)vp_params2->index : -1);
+}
+
+static void
+TraceFragmentProgram(int i)
+{
+	PS3_GPU_Log("[trace] fp %d: regs %u attr %u insn %u control %08x texcoords %04x 2D %04x 3D %04x offset %08x",
+			i, fp[i]->num_regs, fp[i]->num_attr, fp[i]->num_insn, fp[i]->fp_control,
+			fp[i]->texcoords, fp[i]->texcoord2D, fp[i]->texcoord3D, fp_offset[i]);
+}
+
+static void
+TraceDraw(const gpu_draw_t *d, const gpu_vert_t *v, int n, const float *params,
+		const float *texinfo, const float *params2)
+{
+	float cw;
+	int i;
+
+	if (tr_frame || tr_draws >= 16)
+	{
+		return;
+	}
+
+	if (tr_draws++ == 0)
+	{
+		PS3_GPU_Log("[trace] frame %u: smooth %d mvp", frame_no, smooth);
+		for (i = 0; i < 4; i++)
+		{
+			PS3_GPU_Log("[trace]   %10.4f %10.4f %10.4f %10.4f",
+					tr_mvp[i * 4], tr_mvp[i * 4 + 1], tr_mvp[i * 4 + 2], tr_mvp[i * 4 + 3]);
+		}
+	}
+
+	cw = tr_mvp[12] * v[0].x + tr_mvp[13] * v[0].y + tr_mvp[14] * v[0].z + tr_mvp[15] * v[0].w;
+
+	PS3_GPU_Log("[trace] draw %d: n %d prog %d tex %dx%d blend %d dt %d dw %d cw %d st %d",
+			tr_draws, n, d->prog, GPU_TexWidth(d->tex), GPU_TexHeight(d->tex),
+			d->blend, d->depth_test, d->depth_write, d->color_write, d->stencil);
+	PS3_GPU_Log("[trace]   params %.3f %.3f %.3f %.3f texinfo %.3f %.3f %.5f %.5f params2 %.3f %.3f %.3f %.3f",
+			params[0], params[1], params[2], params[3], texinfo[0], texinfo[1], texinfo[2], texinfo[3],
+			params2[0], params2[1], params2[2], params2[3]);
+	PS3_GPU_Log("[trace]   v0 pos %.2f %.2f %.2f %.2f uv %.4f %.4f light %.3f maxrow %.3f color %08x -> clip w %.3f",
+			v[0].x, v[0].y, v[0].z, v[0].w, v[0].u, v[0].v, v[0].light, v[0].maxrow,
+			(unsigned)v[0].color, cw);
+}
+#endif
 static u64 prof_wait_us, prof_lock_us;
 static u32 prof_draws, prof_verts;
 
@@ -641,8 +712,14 @@ LoadPrograms(void)
 		memcpy(fp_ucode[i], ucode, size);
 		FlushRange(fp_ucode[i], size);
 		rsxAddressToOffset(fp_ucode[i], &fp_offset[i]);
+#ifdef PS3_GPU_TRACE
+		TraceFragmentProgram(i);
+#endif
 	}
 
+#ifdef PS3_GPU_TRACE
+	TraceVertexProgram();
+#endif
 	return 0;
 }
 
@@ -1254,6 +1331,10 @@ GPU_BeginFrame(void)
 	prof_wait_us += sysGetSystemTime() - t0;
 
 	frame_no++;
+#ifdef PS3_GPU_TRACE
+	tr_frame = (int)(frame_no % 600);
+	tr_draws = 0;
+#endif
 	ProcessFrees(0);
 	ring_head = 0;
 	in_frame = 1;
@@ -1355,6 +1436,9 @@ GPU_SetMatrix(const float *m)
 	}
 
 	SetMatrixRaw(m);
+#ifdef PS3_GPU_TRACE
+	memcpy(tr_mvp, m, sizeof(tr_mvp));
+#endif
 }
 
 void
@@ -1409,6 +1493,9 @@ GPU_DrawTris(const gpu_draw_t *d, const gpu_vert_t *v, int n)
 		SetVec(vp_params, st_params, &st_params_ok, params);
 		SetVec(vp_texinfo, st_texinfo, &st_texinfo_ok, texinfo);
 		SetVec(vp_params2, st_params2, &st_params2_ok, params2);
+#ifdef PS3_GPU_TRACE
+		TraceDraw(d, v, n, params, texinfo, params2);
+#endif
 	}
 	else
 	{
