@@ -422,9 +422,10 @@ typedef struct
     double x, y;
 } cpoint_t;
 
-static float *sspoly_xy;        // all the points, x y x y...
+static float *sspoly_xy;        // all the points, x y x y...: triangles
 static int *sspoly_first;       // [numsubsectors]
-static int *sspoly_count;       // [numsubsectors]
+static int *sspoly_count;       // [numsubsectors], points (3 a triangle)
+static short *sspoly_sec;       // each triangle's sector (sspoly_used / 6)
 static int sspoly_used, sspoly_max;
 static subsector_t *sspoly_level;   // what the polygons were made for
 
@@ -478,24 +479,326 @@ static int ClipPoly(const cpoint_t *in, int n, cpoint_t *out,
     return m;
 }
 
-static void StorePoly(int ss, const cpoint_t *p, int n)
+// a convex polygon's triangles after the subsector's others, the floor
+// and ceiling of sector sec
+static void StorePoly(int ss, const cpoint_t *p, int n, int sec)
 {
-    int i;
+    int i, k;
 
-    if (sspoly_used + n * 2 > sspoly_max)
+    if (sspoly_used + (n - 2) * 6 > sspoly_max)
     {
-        sspoly_max = (sspoly_used + n * 2) * 2 + 4096;
+        sspoly_max = (sspoly_used + (n - 2) * 6) * 2 + 4096;
         sspoly_xy = I_Realloc(sspoly_xy, sspoly_max * sizeof(float));
+        sspoly_sec = I_Realloc(sspoly_sec, (sspoly_max / 6 + 1) * sizeof(short));
     }
 
-    sspoly_first[ss] = sspoly_used / 2;
-    sspoly_count[ss] = n;
+    for (i = 1; i + 1 < n; i++)
+    {
+        const cpoint_t *t[3] = { &p[0], &p[i], &p[i + 1] };
+
+        sspoly_sec[sspoly_used / 6] = (short)sec;
+
+        for (k = 0; k < 3; k++)
+        {
+            sspoly_xy[sspoly_used++] = (float)t[k]->x;
+            sspoly_xy[sspoly_used++] = (float)t[k]->y;
+        }
+    }
+
+    sspoly_count[ss] += (n - 2) * 3;
+}
+
+static double PolyArea(const cpoint_t *p, int n)
+{
+    double a = 0.0;
+    int i;
 
     for (i = 0; i < n; i++)
     {
-        sspoly_xy[sspoly_used++] = (float)p[i].x;
-        sspoly_xy[sspoly_used++] = (float)p[i].y;
+        const cpoint_t *q = &p[(i + 1) % n];
+
+        a += p[i].x * q->y - q->x * p[i].y;
     }
+
+    return fabs(a) * 0.5;
+}
+
+// The vanilla nodes don't close a subsector (no minisegs, as GL nodes
+// have): carved by the partition lines and its own segs, its polygon can
+// take in part of another sector -- a pit, a pillar -- whose lines went to
+// other subsectors. The software renderer never draws a subsector's area
+// (floors are what lies between walls), the GPU one does: the floor of the
+// room covered the pit, or where the room's subsector was culled, the pit
+// had a hole (the pit's own subsectors don't reach there). So the polygon
+// is cut along every line crossing it, and each piece gets the floor and
+// ceiling of the sector it lies in.
+
+#define TRIM_PIECES 64
+
+// does the segment cross the inside of the convex polygon?
+static boolean SegCrossesPoly(const cpoint_t *p, int n, double x1, double y1, double x2, double y2)
+{
+    const double eps = 1.0 / 64.0;
+    double dx = x2 - x1, dy = y2 - y1, len = sqrt(dx * dx + dy * dy);
+    double t0 = 0.0, t1 = 1.0, cxp = 0.0, cyp = 0.0;
+    int i, left = 0, right = 0;
+
+    if (len <= 0.0)
+    {
+        return false;
+    }
+
+    // the polygon on both sides of the line
+    for (i = 0; i < n; i++)
+    {
+        double d = (dx * (p[i].y - y1) - dy * (p[i].x - x1)) / len;
+
+        if (d > eps)
+            left++;
+        else if (d < -eps)
+            right++;
+
+        cxp += p[i].x;
+        cyp += p[i].y;
+    }
+
+    if (!left || !right)
+    {
+        return false;
+    }
+
+    cxp /= n;
+    cyp /= n;
+
+    // and the segment inside it somewhere (clipped by each edge, the
+    // inside being the centroid's side)
+    for (i = 0; i < n && t0 < t1; i++)
+    {
+        const cpoint_t *a = &p[i], *b = &p[(i + 1) % n];
+        double ex = b->x - a->x, ey = b->y - a->y;
+        double side = ex * (cyp - a->y) - ey * (cxp - a->x);
+        double d0 = ex * (y1 - a->y) - ey * (x1 - a->x);
+        double d1 = ex * (y2 - a->y) - ey * (x2 - a->x);
+
+        if (side < 0.0)
+        {
+            d0 = -d0;
+            d1 = -d1;
+        }
+
+        if (d0 < 0.0 && d1 < 0.0)
+            return false;
+
+        if (d0 < 0.0)
+        {
+            double t = d0 / (d0 - d1);
+            if (t > t0) t0 = t;
+        }
+        else if (d1 < 0.0)
+        {
+            double t = d0 / (d0 - d1);
+            if (t < t1) t1 = t;
+        }
+    }
+
+    return (t1 - t0) * len > eps;
+}
+
+// even-odd: the sector's own lines (not those with it on both sides)
+static boolean PointInSector(const sector_t *sec, double x, double y)
+{
+    boolean inside = false;
+    int i;
+
+    for (i = 0; i < sec->linecount; i++)
+    {
+        const line_t *l = sec->lines[i];
+        double x1, y1, x2, y2;
+
+        if (l->frontsector == l->backsector)
+        {
+            continue;
+        }
+
+        x1 = FIX2F(l->v1->r_x);
+        y1 = FIX2F(l->v1->r_y);
+        x2 = FIX2F(l->v2->r_x);
+        y2 = FIX2F(l->v2->r_y);
+
+        if ((y1 > y) != (y2 > y) && x1 + (y - y1) * (x2 - x1) / (y2 - y1) > x)
+        {
+            inside = !inside;
+        }
+    }
+
+    return inside;
+}
+
+static int trimmed_subsectors;
+
+// The pieces given to another sector: drawn when that sector is seen (the
+// subsector they were cut from has a bounding box, made from its segs,
+// that doesn't reach them, and is culled while they show)
+static float *extra_xy;         // triangles
+static short *extra_sec;        // each triangle's sector
+static int extra_used, extra_max;   // floats
+
+static void StoreExtra(const cpoint_t *p, int n, int sec)
+{
+    int i, k;
+
+    if (extra_used + (n - 2) * 6 > extra_max)
+    {
+        extra_max = (extra_used + (n - 2) * 6) * 2 + 1024;
+        extra_xy = I_Realloc(extra_xy, extra_max * sizeof(float));
+        extra_sec = I_Realloc(extra_sec, (extra_max / 6 + 1) * sizeof(short));
+    }
+
+    for (i = 1; i + 1 < n; i++)
+    {
+        const cpoint_t *t[3] = { &p[0], &p[i], &p[i + 1] };
+
+        extra_sec[extra_used / 6] = (short)sec;
+
+        for (k = 0; k < 3; k++)
+        {
+            extra_xy[extra_used++] = (float)t[k]->x;
+            extra_xy[extra_used++] = (float)t[k]->y;
+        }
+    }
+}
+
+// the sector a point lies in, the subsector's own first; -1: none
+static int SectorAt(const sector_t *own, double x, double y)
+{
+    int i;
+
+    if (PointInSector(own, x, y))
+    {
+        return own - sectors;
+    }
+
+    for (i = 0; i < numsectors; i++)
+    {
+        if (&sectors[i] != own && PointInSector(&sectors[i], x, y))
+        {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+static void TrimAndStore(int ss, const cpoint_t *poly, int n)
+{
+    static cpoint_t pieces[TRIM_PIECES][CARVE_MAX], tmp[2][CARVE_MAX];
+    static int counts[TRIM_PIECES];
+    const sector_t *sec = subsectors[ss].sector;
+    double minx = poly[0].x, maxx = poly[0].x, miny = poly[0].y, maxy = poly[0].y;
+    int np = 1, i, j, kept = 0;
+
+    for (i = 1; i < n; i++)
+    {
+        if (poly[i].x < minx) minx = poly[i].x;
+        if (poly[i].x > maxx) maxx = poly[i].x;
+        if (poly[i].y < miny) miny = poly[i].y;
+        if (poly[i].y > maxy) maxy = poly[i].y;
+    }
+
+    memcpy(pieces[0], poly, n * sizeof(cpoint_t));
+    counts[0] = n;
+
+    for (i = 0; i < numlines && np < TRIM_PIECES; i++)
+    {
+        const line_t *l = &lines[i];
+        double x1 = FIX2F(l->v1->r_x), y1 = FIX2F(l->v1->r_y);
+        double x2 = FIX2F(l->v2->r_x), y2 = FIX2F(l->v2->r_y);
+        int count = np;
+
+        if ((x1 < minx && x2 < minx) || (x1 > maxx && x2 > maxx) ||
+            (y1 < miny && y2 < miny) || (y1 > maxy && y2 > maxy))
+        {
+            continue;
+        }
+
+        for (j = 0; j < count && np < TRIM_PIECES; j++)
+        {
+            int na, nb;
+
+            if (!SegCrossesPoly(pieces[j], counts[j], x1, y1, x2, y2))
+            {
+                continue;
+            }
+
+            na = ClipPoly(pieces[j], counts[j], tmp[0], x1, y1, x2 - x1, y2 - y1, 1);
+            nb = ClipPoly(pieces[j], counts[j], tmp[1], x1, y1, x2 - x1, y2 - y1, 0);
+
+            if (na < 3 || nb < 3)
+            {
+                continue;
+            }
+
+            memcpy(pieces[j], tmp[0], na * sizeof(cpoint_t));
+            counts[j] = na;
+            memcpy(pieces[np], tmp[1], nb * sizeof(cpoint_t));
+            counts[np++] = nb;
+        }
+    }
+
+    sspoly_first[ss] = sspoly_used / 2;
+    sspoly_count[ss] = 0;
+
+    if (np > 1)
+    {
+        int moved = 0;
+
+        for (j = 0; j < np; j++)
+        {
+            double cx2 = 0.0, cy2 = 0.0;
+            int k, at;
+
+            if (PolyArea(pieces[j], counts[j]) < 0.01)
+            {
+                continue;
+            }
+
+            for (k = 0; k < counts[j]; k++)
+            {
+                cx2 += pieces[j][k].x;
+                cy2 += pieces[j][k].y;
+            }
+
+            at = SectorAt(sec, cx2 / counts[j], cy2 / counts[j]);
+
+            if (at == sec - sectors)
+            {
+                StorePoly(ss, pieces[j], counts[j], at);
+                kept++;
+            }
+            else if (at >= 0)
+            {
+                StoreExtra(pieces[j], counts[j], at);
+                kept++;
+                moved++;
+            }
+        }
+
+        if (moved)
+        {
+            trimmed_subsectors++;
+        }
+
+        if (kept)
+        {
+            return;
+        }
+
+        // in no sector at all: an odd one (not closed...), as it was
+        sspoly_count[ss] = 0;
+        sspoly_used = sspoly_first[ss] * 2;
+    }
+
+    StorePoly(ss, poly, n, sec - sectors);
 }
 
 static void CarveSubsector(int ss, const cpoint_t *poly, int n)
@@ -523,7 +826,7 @@ static void CarveSubsector(int ss, const cpoint_t *poly, int n)
 
     if (n >= 3)
     {
-        StorePoly(ss, a, n);
+        TrimAndStore(ss, a, n);
     }
     else
     {
@@ -577,6 +880,8 @@ static void BuildSubsectorPolys(void)
     sspoly_first = calloc(numsubsectors, sizeof(int));
     sspoly_count = calloc(numsubsectors, sizeof(int));
     sspoly_used = 0;
+    extra_used = 0;
+    trimmed_subsectors = 0;
 
     M_ClearBox(bbox);
 
@@ -604,6 +909,11 @@ static void BuildSubsectorPolys(void)
     }
 
     sspoly_level = subsectors;
+
+    if (trimmed_subsectors)
+    {
+        PS3_Log("[gpu] %d subsectors' floors cut along other sectors' lines", trimmed_subsectors);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1085,21 +1395,16 @@ static void AddSeg(seg_t *seg)
 // Subsectors, flats
 // ---------------------------------------------------------------------------
 
-static void AddFlat(int ss, sector_t *sec, boolean ceiling)
+// One sector's triangles of the subsector's polygon
+static void AddFlatPart(sector_t *sec, boolean ceiling, const float *xy, int n)
 {
-    gpu_vert_t v[3 * (CARVE_MAX - 2)];
-    const float *xy = sspoly_xy + sspoly_first[ss] * 2;
-    int n = sspoly_count[ss], i, k = 0;
+    static gpu_vert_t *v;
+    static int vmax;
     int picnum = ceiling ? sec->ceilingpic : sec->floorpic;
     float z = FIX2F(ceiling ? sec->interpceilingheight : sec->interpfloorheight);
     float light = 0.0f, du = 0.0f, dv = 0.0f;
     gpu_tex_t *tex = NULL;
-    int kind = KIND_FLAT;
-
-    if (n < 3)
-    {
-        return;
-    }
+    int kind = KIND_FLAT, i;
 
     // a plane on the wrong side of the view isn't seen
     if (ceiling ? (z <= vz && !G_IsSkyFlat(picnum)) : (z >= vz))
@@ -1118,21 +1423,47 @@ static void AddFlat(int ss, sector_t *sec, boolean ceiling)
         G_FlatScroll(sec, ceiling, &du, &dv);
     }
 
-    for (i = 1; i + 1 < n; i++)
+    if (n > vmax)
     {
-        int idx[3] = { 0, i, i + 1 }, j;
-
-        for (j = 0; j < 3; j++)
-        {
-            float px = xy[idx[j] * 2], py = xy[idx[j] * 2 + 1];
-
-            // flats are aligned to the world: 64 units per tile
-            SetVert(&v[k++], px, py, z, (px + du) / 64.0f, (-py + dv) / 64.0f, light, 0xffffffffu);
-        }
+        vmax = n * 2;
+        v = I_Realloc(v, vmax * sizeof(*v));
     }
 
-    AddSurf(tex, kind, v, k);
+    for (i = 0; i < n; i++)
+    {
+        float px = xy[i * 2], py = xy[i * 2 + 1];
+
+        // flats are aligned to the world: 64 units per tile
+        SetVert(&v[i], px, py, z, (px + du) / 64.0f, (-py + dv) / 64.0f, light, 0xffffffffu);
+    }
+
+    AddSurf(tex, kind, v, n);
 }
+
+// The subsector's floor or ceiling: its triangles by sector (see
+// TrimAndStore)
+static void AddFlat(int ss, boolean ceiling)
+{
+    const float *xy = sspoly_xy + sspoly_first[ss] * 2;
+    const short *sec = sspoly_sec + sspoly_first[ss] / 3;
+    int n = sspoly_count[ss], i = 0;
+
+    while (i < n)
+    {
+        int j = i + 3;
+
+        while (j < n && sec[j / 3] == sec[i / 3])
+        {
+            j += 3;
+        }
+
+        AddFlatPart(&sectors[sec[i / 3]], ceiling, xy + i * 2, j - i);
+        i = j;
+    }
+}
+
+// the pieces of other subsectors given to the sectors seen (TrimAndStore)
+static void AddExtraFlats(void);
 
 // the sectors whose things go to the sprite list, once each
 static int *sector_frame;
@@ -1162,8 +1493,8 @@ static void AddSubsector(int num)
 
     if (sspoly_count && sspoly_count[num] >= 3)
     {
-        AddFlat(num, sec, false);
-        AddFlat(num, sec, true);
+        AddFlat(num, false);
+        AddFlat(num, true);
     }
 
     G_SubsectorExtra(sub);
@@ -1171,6 +1502,29 @@ static void AddSubsector(int num)
     for (i = 0; i < sub->numlines; i++)
     {
         AddSeg(&segs[sub->firstline + i]);
+    }
+}
+
+static void AddExtraFlats(void)
+{
+    int i = 0, n = extra_used / 2;
+
+    while (i < n)
+    {
+        int s = extra_sec[i / 3], j = i + 3;
+
+        while (j < n && extra_sec[j / 3] == s)
+        {
+            j += 3;
+        }
+
+        if (sector_frame[s] == gpu_frame)
+        {
+            AddFlatPart(&sectors[s], false, extra_xy + i * 2, j - i);
+            AddFlatPart(&sectors[s], true, extra_xy + i * 2, j - i);
+        }
+
+        i = j;
     }
 }
 
@@ -1730,6 +2084,7 @@ void R_GPU_RenderPlayerView(player_t *player)
     else
         AddSubsector(0);
 
+    AddExtraFlats();
     CollectSprites();
 
     // the weapon: the engine's own code, its vissprites come back to
