@@ -615,7 +615,7 @@ static boolean PointInSector(const sector_t *sec, double x, double y)
         const line_t *l = sec->lines[i];
         double x1, y1, x2, y2;
 
-        if (l->frontsector == l->backsector)
+        if (l->frontsector == l->backsector || G_IsPolyobjLine(l))
         {
             continue;
         }
@@ -717,6 +717,13 @@ static void TrimAndStore(int ss, const cpoint_t *poly, int n)
         double x1 = FIX2F(l->v1->r_x), y1 = FIX2F(l->v1->r_y);
         double x2 = FIX2F(l->v2->r_x), y2 = FIX2F(l->v2->r_y);
         int count = np;
+
+        // a polyobject's lines were moved from the sector they were drawn
+        // in, which they still name, to where they stand: not a boundary
+        if (G_IsPolyobjLine(l))
+        {
+            continue;
+        }
 
         if ((x1 < minx && x2 < minx) || (x1 > maxx && x2 > maxx) ||
             (y1 < miny && y2 < miny) || (y1 > maxy && y2 > maxy))
@@ -1248,9 +1255,12 @@ static void SkyWall(float x1, float y1, float x2, float y2, float zbot)
     WallQuad(NULL, KIND_SKY, x1, y1, x2, y2, zbot, 32768.0f, 0, 0, 0, 0);
 }
 
-static void AddSeg(seg_t *seg)
+// front: the sector the seg is drawn for -- its own front sector, or for a
+// Hexen polyobject the subsector's (R_Subsector draws polyobject lines
+// with the sector they stand in, not the one they were drawn in)
+static void AddSegFront(seg_t *seg, sector_t *front)
 {
-    sector_t *front = seg->frontsector, *back = seg->backsector;
+    sector_t *back = seg->backsector;
     side_t *side = seg->sidedef;
     line_t *line = seg->linedef;
     angle_t angle1, angle2, a1, a2;
@@ -1496,6 +1506,11 @@ static void AddFlat(int ss, boolean ceiling)
 
 // the floors and ceilings of the sectors seen
 static void AddSectorFlats(void);
+
+static void AddSeg(seg_t *seg)
+{
+    AddSegFront(seg, seg->frontsector);
+}
 
 // the sectors whose things go to the sprite list, once each
 static int *sector_frame;

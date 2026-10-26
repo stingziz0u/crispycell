@@ -86,6 +86,13 @@ static void G_SubsectorExtra(subsector_t *sub)
     (void)sub;
 }
 
+// no polyobjects here
+static boolean G_IsPolyobjLine(const line_t *line)
+{
+    (void)line;
+    return false;
+}
+
 // COLORMAP: 32 light levels, invulnerability, black
 static int G_ColormapRows(void)
 {

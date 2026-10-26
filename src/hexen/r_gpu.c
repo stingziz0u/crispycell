@@ -37,7 +37,7 @@ void R_DrawPlayerSprites(void);		// r_things.c
 void R_CheckInterpolateSector(sector_t *sector);	// r_bsp.c
 extern boolean LevelUseFullBright;	// r_things.c
 
-static void AddSeg(seg_t *seg);		// r_gpu_impl.h
+static void AddSegFront(seg_t *seg, sector_t *front);	// r_gpu_impl.h
 
 static void G_InterpolateSector(sector_t *sector)
 {
@@ -166,11 +166,46 @@ static void G_SubsectorExtra(subsector_t *sub)
     {
         int i;
 
+        // drawn with the sector they stand in, as R_Subsector does
         for (i = 0; i < sub->poly->numsegs; i++)
         {
-            AddSeg(sub->poly->segs[i]);
+            AddSegFront(sub->poly->segs[i], sub->sector);
         }
     }
+}
+
+// The lines of the level's polyobjects: moved at the level's start from
+// where they were drawn, they still name that sector
+static boolean G_IsPolyobjLine(const line_t *line)
+{
+    static byte *marks;
+    static const line_t *marks_for;
+    static int marks_count;
+
+    if (marks_for != lines || marks_count != numlines)
+    {
+        int i, j;
+
+        free(marks);
+        marks = calloc(numlines ? numlines : 1, 1);
+        marks_for = lines;
+        marks_count = numlines;
+
+        for (i = 0; i < po_NumPolyobjs; i++)
+        {
+            for (j = 0; j < polyobjs[i].numsegs; j++)
+            {
+                const seg_t *seg = polyobjs[i].segs[j];
+
+                if (seg->linedef)
+                {
+                    marks[seg->linedef - lines] = 1;
+                }
+            }
+        }
+    }
+
+    return marks[line - lines] != 0;
 }
 
 // COLORMAP or the map's fade table (fog), read into colormaps

@@ -124,6 +124,13 @@ static void G_SubsectorExtra(subsector_t *sub)
     (void)sub;
 }
 
+// no polyobjects here
+static boolean G_IsPolyobjLine(const line_t *line)
+{
+    (void)line;
+    return false;
+}
+
 static int G_ColormapRows(void)
 {
     int rows = W_LumpLength(W_GetNumForName("COLORMAP")) / 256;
