@@ -41,6 +41,7 @@ void R_GPU_CaptureSprite(vissprite_t *vis);
 // row, composed from its patches with the software renderer's rules
 int R_GPU_TextureWidth(int texnum);
 void R_GPU_ComposeTexture(int texnum, byte *index, byte *mask);
+void R_GPU_ComposeTextureH(int texnum, int h, byte *index, byte *mask);
 
 #endif
 

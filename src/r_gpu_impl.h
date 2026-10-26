@@ -123,9 +123,10 @@ static void SetVert(gpu_vert_t *v, float x, float y, float z, float u, float t,
 // ---------------------------------------------------------------------------
 
 // [numtextures * WALLTEX_KINDS]: opaque; masked by the patches (holes);
-// masked where the index is 0 (the front layer of a double sky)
-#define WALLTEX_KINDS 3
-enum { TEX_OPAQUE, TEX_MASKED, TEX_KEY0 };
+// masked where the index is 0 (the front layer of a double sky); and the
+// same two for skies, which are as tall as their patch (G_SkyHeight)
+#define WALLTEX_KINDS 5
+enum { TEX_OPAQUE, TEX_MASKED, TEX_KEY0, TEX_SKY, TEX_SKY_KEY0 };
 static gpu_tex_t **walltex;
 static int walltex_count;
 static gpu_tex_t **flattex;     // [numflats]
@@ -261,11 +262,17 @@ static gpu_tex_t *WallTextureEx(int texnum, int kind)
     {
         w = R_GPU_TextureWidth(texnum);
         h = textureheight[texnum] >> FRACBITS;
+
+        if (kind == TEX_SKY || kind == TEX_SKY_KEY0)
+        {
+            h = G_SkyHeight(texnum);
+        }
+
         Scratch(w * h);
-        R_GPU_ComposeTexture(texnum, scratch_index, scratch_mask);
+        R_GPU_ComposeTextureH(texnum, h, scratch_index, scratch_mask);
         Brightness(scratch_bright, scratch_index, w * h, G_TextureBrightmap(texnum));
 
-        if (kind == TEX_KEY0)
+        if (kind == TEX_KEY0 || kind == TEX_SKY_KEY0)
         {
             for (i = 0; i < w * h; i++)
                 scratch_mask[i] = scratch_index[i] != 0;
@@ -1917,7 +1924,7 @@ static void SetOrtho(float w, float h)
 static void DrawSkyLayer(int texnum, float texmid, float iscale, float uoffset,
                          int kind, int fixed)
 {
-    gpu_tex_t *tex = WallTextureEx(texnum, kind);
+    gpu_tex_t *tex = WallTextureEx(texnum, kind == TEX_KEY0 ? TEX_SKY_KEY0 : TEX_SKY);
     gpu_draw_t d;
     vbuf_t *b = &batch;
     float texw, texh;

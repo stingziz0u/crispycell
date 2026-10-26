@@ -297,8 +297,14 @@ int R_GPU_TextureWidth(int texnum)
 
 void R_GPU_ComposeTexture(int texnum, byte *index, byte *mask)
 {
+    R_GPU_ComposeTextureH(texnum, textures[texnum]->height, index, mask);
+}
+
+// h rows: the texture's height, or a sky's patch, taller (G_SkyHeight)
+void R_GPU_ComposeTextureH(int texnum, int h, byte *index, byte *mask)
+{
     texture_t *texture = textures[texnum];
-    const int w = texture->width, h = texture->height;
+    const int w = texture->width;
     const short *collump = texturecolumnlump[texnum];
     texpatch_t *patch;
     int i;

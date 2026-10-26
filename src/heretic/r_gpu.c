@@ -119,6 +119,15 @@ static int G_FakeContrast(const seg_t *seg)
     return seg->fakecontrast;
 }
 
+// a sky texture's rows: R_DrawPlanes reads its patch whole, which can be
+// taller than the texture (Heretic's and Hexen's 200 row skies)
+static int G_SkyHeight(int texnum)
+{
+    int h = textureheight[texnum] >> FRACBITS, p = R_GetPatchHeight(texnum, 0);
+
+    return p > h ? p : h;
+}
+
 static void G_SubsectorExtra(subsector_t *sub)
 {
     (void)sub;

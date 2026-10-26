@@ -81,6 +81,12 @@ static int G_FakeContrast(const seg_t *seg)
     return seg->fakecontrast;
 }
 
+// a sky texture's rows
+static int G_SkyHeight(int texnum)
+{
+    return textureheight[texnum] >> FRACBITS;
+}
+
 static void G_SubsectorExtra(subsector_t *sub)
 {
     (void)sub;

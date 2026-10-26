@@ -82,6 +82,12 @@ static void G_FlatScroll(const sector_t *sec, boolean ceiling, float *du, float 
     *du = *dv = 0.0f;
 }
 
+// a sky texture's rows
+static int G_SkyHeight(int texnum)
+{
+    return textureheight[texnum] >> FRACBITS;
+}
+
 static void G_SubsectorExtra(subsector_t *sub)
 {
     (void)sub;
