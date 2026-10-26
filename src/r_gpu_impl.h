@@ -636,6 +636,9 @@ static boolean PointInSector(const sector_t *sec, double x, double y)
 
 static int trimmed_subsectors;
 
+// each sector's subsectors (sec_ss[sec_ss_first[s] .. sec_ss_first[s+1]])
+static int *sec_ss_first, *sec_ss;
+
 // The pieces given to another sector: drawn when that sector is seen (the
 // subsector they were cut from has a bounding box, made from its segs,
 // that doesn't reach them, and is culled while they show)
@@ -909,6 +912,35 @@ static void BuildSubsectorPolys(void)
     }
 
     sspoly_level = subsectors;
+
+    free(sec_ss_first);
+    free(sec_ss);
+    sec_ss_first = calloc(numsectors + 1, sizeof(int));
+    sec_ss = calloc(numsubsectors ? numsubsectors : 1, sizeof(int));
+
+    for (i = 0; i < numsubsectors; i++)
+    {
+        sec_ss_first[subsectors[i].sector - sectors + 1]++;
+    }
+
+    for (i = 0; i < numsectors; i++)
+    {
+        sec_ss_first[i + 1] += sec_ss_first[i];
+    }
+
+    for (i = 0; i < numsubsectors; i++)
+    {
+        int s = subsectors[i].sector - sectors;
+
+        sec_ss[sec_ss_first[s]++] = i;
+    }
+
+    for (i = numsectors; i > 0; i--)
+    {
+        sec_ss_first[i] = sec_ss_first[i - 1];
+    }
+
+    sec_ss_first[0] = 0;
 
     if (trimmed_subsectors)
     {
@@ -1462,8 +1494,8 @@ static void AddFlat(int ss, boolean ceiling)
     }
 }
 
-// the pieces of other subsectors given to the sectors seen (TrimAndStore)
-static void AddExtraFlats(void);
+// the floors and ceilings of the sectors seen
+static void AddSectorFlats(void);
 
 // the sectors whose things go to the sprite list, once each
 static int *sector_frame;
@@ -1491,12 +1523,6 @@ static void AddSubsector(int num)
         visible_sectors[numvisible_sectors++] = s;
     }
 
-    if (sspoly_count && sspoly_count[num] >= 3)
-    {
-        AddFlat(num, false);
-        AddFlat(num, true);
-    }
-
     G_SubsectorExtra(sub);
 
     for (i = 0; i < sub->numlines; i++)
@@ -1505,9 +1531,34 @@ static void AddSubsector(int num)
     }
 }
 
-static void AddExtraFlats(void)
+// Floors and ceilings go by sector, not by subsector: every subsector of a
+// sector of which any subsector was reached. With the vanilla nodes a
+// subsector's area reaches well past its segs and so past its bounding box,
+// which is all the culling knows: the part of a room's floor outside it was
+// culled while in view, and what lay behind showed through (Doom 2 MAP01's
+// nukage and skylight at some angles). The software renderer draws floors
+// from the walls seen, never by subsector. Walls stay culled as it does.
+static void AddSectorFlats(void)
 {
-    int i = 0, n = extra_used / 2;
+    int i = 0, n = extra_used / 2, v;
+
+    for (v = 0; v < numvisible_sectors; v++)
+    {
+        int s = visible_sectors[v], k;
+
+        for (k = sec_ss_first[s]; k < sec_ss_first[s + 1]; k++)
+        {
+            int ss = sec_ss[k];
+
+            if (sspoly_count[ss] >= 3)
+            {
+                AddFlat(ss, false);
+                AddFlat(ss, true);
+            }
+        }
+    }
+
+    // the pieces of other subsectors given to these sectors (TrimAndStore)
 
     while (i < n)
     {
@@ -2084,7 +2135,7 @@ void R_GPU_RenderPlayerView(player_t *player)
     else
         AddSubsector(0);
 
-    AddExtraFlats();
+    AddSectorFlats();
     CollectSprites();
 
     // the weapon: the engine's own code, its vissprites come back to
