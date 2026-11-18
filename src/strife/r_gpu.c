@@ -119,10 +119,11 @@ static float G_SpriteLeft(int lump, boolean flip)
     return FIX2F_G(spriteoffset[lump]);
 }
 
+// villsa [STRIFE] feet in water: R_ProjectSprite already moved the
+// vissprite down 10 units, and R_DrawVisSprite cuts those 10 rows
 static float G_SpriteFootclip(const vissprite_t *vis)
 {
-    (void)vis;
-    return 0.0f;
+    return (vis->mobjflags & MF_FEETCLIPPED) ? 10.0f : 0.0f;
 }
 
 // R_DrawPSprite already moved the weapon for free look

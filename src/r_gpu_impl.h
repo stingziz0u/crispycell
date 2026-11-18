@@ -1710,6 +1710,24 @@ static void WorldSprite(vissprite_t *vis)
         bottom += clip;
         t1 = (h - clip) / h;
     }
+    else
+    {
+        // [PS3] Many patches reach a few units below the thing's origin.
+        // The software renderer draws a sprite over the floor it stands
+        // on (it only clips sprites against walls), but here the floor's
+        // depth hides those rows and the thing looks sunk into the
+        // ground (GZDoom's "sprite clipping"). A thing standing on its
+        // floor is lifted as much as it sinks, up to half its height.
+        // Feet clipped in water and the like keep sinking (above).
+        const sector_t *sec = R_PointInSubsector(vis->gx, vis->gy)->sector;
+        float floor = FIX2F(sec->interpfloorheight);
+
+        if (FIX2F(vis->gz) <= floor + 1.0f && bottom < floor && floor - bottom <= h * 0.5f)
+        {
+            top += floor - bottom;
+            bottom = floor;
+        }
+    }
 
     spr = NewSprite(&sprlist, &numsprites_gpu, &maxsprites_gpu);
     spr->tex = tex;
