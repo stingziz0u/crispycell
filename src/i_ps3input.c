@@ -26,7 +26,10 @@ int mouse_threshold = 10;
 float mouse_acceleration_y = 1.0;
 int mouse_threshold_y = 0;
 int mouse_y_invert = 0;
-int runcentering = 1;
+// [PS3] Strife: "Run" doesn't center the view by default (Crispness 3/3).
+// The right stick looks up and down; vanilla Strife centered it on every
+// run, so holding L2 kept pulling the view back.
+int runcentering = 0;
 
 double I_AccelerateMouse(int val)
 {

@@ -276,6 +276,11 @@ Heretic has no jump; Circle does nothing there.
 | Quicksave / quickload, drop item | unbound (see Rebinding) |
 | Menu | Start |
 
+Running doesn't center the view: vanilla Strife pulled the view back to
+the horizon on every run, which fights the right stick. The switch is
+Options -> Crispness -> page 3 -> **"Run" Centers View** (a config saved
+by an older version keeps the value it had: turn it off there).
+
 **Conversations** are a menu: D-pad to pick an answer, Cross to say it. To
 leave, pick the goodbye answer or press Start. The button that picked an
 answer is ignored until it is released, so it cannot talk to the same
@@ -415,6 +420,9 @@ sprite rotations and translations, translucency, brightmaps, free look,
 widescreen — so the picture looks the same, only finer. The status bar,
 HUD, menus and automap are still drawn by the engine as before, over the
 3D view. Screen wipes melt into one frame drawn by the software renderer.
+Many sprites reach a few pixels below the floor they stand on; the
+software renderer draws them over it, so the GPU renderer lifts them by
+that much instead of letting the floor hide their feet.
 
 The choices are saved as `ps3_renderer` and `ps3_texture_filter` in the
 game's config file.
