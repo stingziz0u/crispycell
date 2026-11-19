@@ -79,10 +79,10 @@ coexist on the XMB and keep their own savegames and configuration.
 
 | Package | APPID | Installs to |
 |---|---|---|
-| `CrispyDoom-1.4.pkg` | `CRISPDOOM` | `/dev_hdd0/game/CRISPDOOM/USRDIR/` |
-| `CrispyHeretic-1.4.pkg` | `CRISPHERE` | `/dev_hdd0/game/CRISPHERE/USRDIR/` |
-| `CrispyHexen-1.4.pkg` | `CRISPHEX1` | `/dev_hdd0/game/CRISPHEX1/USRDIR/` |
-| `CrispyStrife-1.4.pkg` | `CRISPSTRF` | `/dev_hdd0/game/CRISPSTRF/USRDIR/` |
+| `CrispyDoom-1.5.pkg` | `CRISPDOOM` | `/dev_hdd0/game/CRISPDOOM/USRDIR/` |
+| `CrispyHeretic-1.5.pkg` | `CRISPHERE` | `/dev_hdd0/game/CRISPHERE/USRDIR/` |
+| `CrispyHexen-1.5.pkg` | `CRISPHEX1` | `/dev_hdd0/game/CRISPHEX1/USRDIR/` |
+| `CrispyStrife-1.5.pkg` | `CRISPSTRF` | `/dev_hdd0/game/CRISPSTRF/USRDIR/` |
 
 Install from the XMB, then FTP your WADs into that folder. The launcher
 picks them up on the next boot — no configuration file to edit.
@@ -507,8 +507,8 @@ The `ps3/` directory holds everything specific to this port's build:
 - **`build.sh`** — builds and packages one engine end to end:
   `./ps3/build.sh doom`, `heretic`, `hexen` or `strife`. Rewrites
   `appid.mk`, reconfigures, clears the object tree when the engine changes,
-  builds, and packages `Crispy<Game>-1.4.pkg` in the project root.
-  `./ps3/build.sh strife-debug` makes `CrispyStrife-1.4-debug.pkg`, a
+  builds, and packages `Crispy<Game>-1.5.pkg` in the project root.
+  `./ps3/build.sh strife-debug` makes `CrispyStrife-1.5-debug.pkg`, a
   test build of Strife with cheats on the pad: hold L3 + R3 and press
   Triangle (god mode), Square (all weapons and ammo), Cross (next map) or
   Circle (all keys). L3 + R3 + Select, inside a level, starts an
@@ -518,6 +518,11 @@ The `ps3/` directory holds everything specific to this port's build:
   inventory and pop-ups, a save to the last slot ("AUTOTEST", which it
   overwrites) and its load, then the next map. Dialogues get answered on
   the way. Each step is logged as `[auto]`, with a heartbeat every 10 s.
+  `./ps3/build.sh hexen-debug` makes `CrispyHexen-1.5-debug.pkg`: Hexen
+  with the same crash trail (every Hexen function traced, dumped to the
+  log if the game thread dies, with `ps3/tools/crashaddr.py` to name it),
+  a watchdog that dumps it too after 20 s without a frame, and checks of
+  the map data as it is loaded and read.
   L3 + R3 + D-pad up turns the frame counter on and off. The debug
   package also keeps a trail in memory -- the last breadcrumbs and every
   function entry and exit of the Strife code -- and if the game thread
