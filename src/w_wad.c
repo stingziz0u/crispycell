@@ -35,6 +35,94 @@
 
 #include "w_wad.h"
 
+#ifdef PS3_DEBUG_CHEATS
+#include "i_ps3debug.h"
+
+// [PS3] Debug package (Hexen's broken polyobj chains): MAP01's VERTEXES,
+// read again into the zone for a second game, came out with bytes 8..15
+// of every 16 wrong, while a read of the same lump into a malloc'd buffer
+// is right. Every lump read into the cache is checked against a second
+// read into malloc'd memory (16-aligned). On a mismatch: where the block
+// is (its alignment), which offsets (counted by offset mod 16), and two
+// experiments on the same block: read the lump into it again, and memcpy
+// the good copy into it. They tell a read that goes wrong at some
+// addresses from a memcpy that does. The block is left with the good
+// bytes, copied one by one, so the game goes on with correct data.
+static int ps3_badreads;
+
+static int PS3_CountDiff(const byte *a, const byte *b, int len)
+{
+    int i, n = 0;
+
+    for (i = 0; i < len; i++)
+    {
+        n += a[i] != b[i];
+    }
+    return n;
+}
+
+static void PS3_VerifyLumpRead(lumpindex_t lumpnum, byte *cache)
+{
+    int len = W_LumpLength(lumpnum), i, n, first = -1;
+    int bymod[16] = { 0 };
+    byte *good;
+
+    if (len <= 0 || ps3_badreads >= 10)
+    {
+        return;
+    }
+    good = malloc(len);
+    if (!good)
+    {
+        return;
+    }
+    W_ReadLump(lumpnum, good);
+
+    for (i = 0, n = 0; i < len; i++)
+    {
+        if (cache[i] != good[i])
+        {
+            if (first < 0)
+            {
+                first = i;
+            }
+            bymod[i & 15]++;
+            n++;
+        }
+    }
+
+    if (n)
+    {
+        int reread, copied, bytes;
+
+        ps3_badreads++;
+        PS3_Log("[read] %.8s (lump %d, %d bytes) read into %p (addr %% 16 = %d, "
+                "%% 128 = %d): %d bytes wrong, first at %d; good copy at %p",
+                lumpinfo[lumpnum]->name, lumpnum, len, (void *) cache,
+                (int) ((uintptr_t) cache & 15), (int) ((uintptr_t) cache & 127),
+                n, first, (void *) good);
+        PS3_Log("[read]  wrong bytes by offset %% 16: %d %d %d %d %d %d %d %d "
+                "%d %d %d %d %d %d %d %d", bymod[0], bymod[1], bymod[2],
+                bymod[3], bymod[4], bymod[5], bymod[6], bymod[7], bymod[8],
+                bymod[9], bymod[10], bymod[11], bymod[12], bymod[13],
+                bymod[14], bymod[15]);
+
+        W_ReadLump(lumpnum, cache);
+        reread = PS3_CountDiff(cache, good, len);
+        memcpy(cache, good, len);
+        copied = PS3_CountDiff(cache, good, len);
+        for (i = 0; i < len; i++)
+        {
+            cache[i] = good[i];
+        }
+        bytes = PS3_CountDiff(cache, good, len);
+        PS3_Log("[read]  same block: read again -> %d wrong, memcpy -> %d wrong, "
+                "byte by byte -> %d wrong", reread, copied, bytes);
+    }
+    free(good);
+}
+#endif
+
 //
 // GLOBALS
 //
@@ -434,6 +522,9 @@ void *W_CacheLumpNum(lumpindex_t lumpnum, int tag)
 
         lump->cache = Z_Malloc(W_LumpLength(lumpnum), tag, &lump->cache);
 	W_ReadLump (lumpnum, lump->cache);
+#ifdef PS3_DEBUG_CHEATS
+        PS3_VerifyLumpRead(lumpnum, lump->cache);
+#endif
         result = lump->cache;
     }
 	
