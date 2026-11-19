@@ -17,5 +17,13 @@ set(CMAKE_EXE_LINKER_FLAGS "-L${PS3DEV}/ppu/lib -L${PS3DEV}/portlibs/ppu/lib -ln
 
 include_directories(${PS3DEV}/ppu/include)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -mcpu=cell -fomit-frame-pointer")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -mcpu=cell -fomit-frame-pointer")
+# -fno-tree-vectorize: the PPU GCC's automatic AltiVec code (on at -O3)
+# miscompiled Hexen's P_LoadVertexes. Into a 16-byte aligned array, vertexes
+# 2-3 of every 4 got another vertex's coordinates (vupkhsh/vupklsh, vmrghw,
+# stvx); into an array 8 bytes off, the scalar path ran and they were
+# right. So whether a new game crashed depended on where the zone put the
+# array (polyobj chains that never close: IterFindPolySegs recursing until
+# the stack overflowed). Nothing here was written for the vectorizer, and a
+# loop it gets wrong goes wrong silently: it stays off for all of it.
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -mcpu=cell -fomit-frame-pointer -fno-tree-vectorize")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -mcpu=cell -fomit-frame-pointer -fno-tree-vectorize")
