@@ -764,21 +764,87 @@ int PSpriteSY[NUMCLASSES][NUMWEAPONS] = {
 
 boolean pspr_interp = true; // [crispy] interpolate weapon bobbing
 
-// [PS3] Many Hexen weapons are drawn against a side of the 4:3 screen
-// (their art ends at x 0 or 320). In widescreen that edge is inside the
-// view, so the weapon stops short of the screen's side and looks cut off.
-// As VoidSW's RS_ALIGN_L / RS_ALIGN_R (EDuke32-PS3 patch 35), such a
-// weapon moves out to the wide screen's edge by the extra width. Decided
-// once per weapon, from its ready frame at rest (sx 1.0), and applied to
-// all its frames and its flash, so attacks don't jump sideways between
-// frames. Returns the shift in 320-wide units (0 in 4:3).
+// [PS3] Many Hexen weapons are drawn against a side of the 4:3 screen in
+// some of their frames (the Fighter's punch ends at x 320). In widescreen
+// that edge is inside the view, so the art stops short of the screen's
+// side and looks cut off. As VoidSW's RS_ALIGN_L / RS_ALIGN_R
+// (EDuke32-PS3 patch 35), such a weapon moves out to the wide screen's
+// edge by the extra width.
+//
+// Decided once per weapon and class, from every frame the weapon can show
+// (its up, down, ready, attack, hold and flash sequences, followed through
+// nextstate): if some frame reaches within 2 columns of one side, and none
+// reaches the other, all its frames go that way. Per frame, the art would
+// jump sideways between the frames that touch the side and those that
+// don't.
+
+enum { WIDE_UNKNOWN, WIDE_NONE, WIDE_LEFT, WIDE_RIGHT };
+
+static byte pspr_wideside[NUMWEAPONS][NUMCLASSES];
+
+static void R_PSpriteSides(int statenum, boolean *left, boolean *right)
+{
+    int n;
+
+    for (n = 0; n < 64 && statenum > S_NULL && statenum < NUMSTATES; n++)
+    {
+        const state_t *st = &states[statenum];
+        const spritedef_t *sd = &sprites[st->sprite];
+
+        if ((st->frame & FF_FRAMEMASK) < sd->numframes)
+        {
+            const spriteframe_t *sf = &sd->spriteframes[st->frame & FF_FRAMEMASK];
+            int lump = sf->lump[0];
+            // where R_DrawPSprite puts it at rest (sx 1.0), 0..320
+            fixed_t l = FRACUNIT - spriteoffset[lump];
+            fixed_t r = l + spritewidth[lump];
+            if (l <= 2 * FRACUNIT)
+            {
+                *left = true;
+            }
+            if (r >= (ORIGWIDTH - 2) * FRACUNIT)
+            {
+                *right = true;
+            }
+        }
+
+        if (st->nextstate == statenum)
+        {
+            break;
+        }
+        statenum = st->nextstate;
+    }
+}
+
+static int R_PSpriteWideSide(int weapon, int pclass)
+{
+    if (weapon < 0 || weapon >= NUMWEAPONS || pclass < 0 || pclass >= NUMCLASSES)
+    {
+        return WIDE_NONE;
+    }
+    if (pspr_wideside[weapon][pclass] == WIDE_UNKNOWN)
+    {
+        const weaponinfo_t *wi = &WeaponInfo[weapon][pclass];
+        boolean left = false, right = false;
+
+        R_PSpriteSides(wi->upstate, &left, &right);
+        R_PSpriteSides(wi->downstate, &left, &right);
+        R_PSpriteSides(wi->readystate, &left, &right);
+        R_PSpriteSides(wi->atkstate, &left, &right);
+        R_PSpriteSides(wi->holdatkstate, &left, &right);
+        R_PSpriteSides(wi->flashstate, &left, &right);
+
+        pspr_wideside[weapon][pclass] = left == right ? WIDE_NONE
+                                      : left ? WIDE_LEFT : WIDE_RIGHT;
+    }
+    return pspr_wideside[weapon][pclass];
+}
+
+// The shift for the weapon in view, in 320-wide units (0 in 4:3).
 static fixed_t R_PSpriteWideShift(void)
 {
-    const weaponinfo_t *wi;
-    const state_t *st;
-    const spritedef_t *sd;
-    fixed_t left, right, delta;
-    int lump;
+    fixed_t delta;
+    int side;
 
     // the view's width in 320-wide units (pspritescale is the 4:3 part's
     // scale, R_ExecuteSetViewSize), minus 320, split between the sides
@@ -792,29 +858,8 @@ static fixed_t R_PSpriteWideShift(void)
         return 0;
     }
 
-    wi = &WeaponInfo[viewplayer->readyweapon][viewplayer->class];
-    st = &states[wi->readystate];
-    sd = &sprites[st->sprite];
-
-    if ((st->frame & FF_FRAMEMASK) >= sd->numframes)
-    {
-        return 0;
-    }
-
-    lump = sd->spriteframes[st->frame & FF_FRAMEMASK].lump[0];
-    left = FRACUNIT - spriteoffset[lump];
-    right = left + spritewidth[lump];
-
-    // within 2 columns of a side, and not across the whole screen
-    if (left <= 2 * FRACUNIT && right < (ORIGWIDTH - 2) * FRACUNIT)
-    {
-        return -delta;
-    }
-    if (right >= (ORIGWIDTH - 2) * FRACUNIT && left > 2 * FRACUNIT)
-    {
-        return delta;
-    }
-    return 0;
+    side = R_PSpriteWideSide(viewplayer->readyweapon, viewplayer->class);
+    return side == WIDE_LEFT ? -delta : side == WIDE_RIGHT ? delta : 0;
 }
 
 void R_DrawPSprite(pspdef_t * psp, int translucent) // [crispy] translucency for weapon flash translucency
