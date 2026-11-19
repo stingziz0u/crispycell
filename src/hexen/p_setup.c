@@ -31,6 +31,7 @@
 #include "p_mapformat.h"
 #include "r_gpu.h" // [PS3]
 #include "i_ps3debug.h" // [PS3]
+#include "i_timer.h" // [PS3] I_Sleep, for the debug package
 
 // [PS3] The map lump being set up (po_man.c's diagnostics re-read it).
 int ps3_maplump = -1;
@@ -134,6 +135,100 @@ static void PS3_VertexCheck(const char *where, int a, int b)
 // lump, which bytes, whose zone blocks are around it, and dumps the trail
 // (what ran in the last frames).
 void Z_PS3_Describe(const void *ptr, char *out, int n);     // z_zone.c
+
+// Ren's fifth log: no cached lump written over, no bad read, and yet
+// the vertexes are wrong right after P_LoadVertexes. Inside it, then:
+// are the source bytes right (against a fresh read), is the destination
+// what the loop computed from them? If not, the loop runs again and the
+// vertexes are checked right away, after 20 ms and after 200 ms: a
+// destination that goes bad again while nothing runs on this thread is
+// written by something else (another thread, the RSX). The bad words are
+// logged in hex with the zone blocks around.
+static int PS3_VertexMismatches(const mapvertex_t *ml, int *first)
+{
+    int i, n = 0;
+
+    *first = -1;
+    for (i = 0; i < numvertexes; i++)
+    {
+        if (vertexes[i].x != SHORT(ml[i].x) << FRACBITS
+         || vertexes[i].y != SHORT(ml[i].y) << FRACBITS
+         || vertexes[i].r_x != vertexes[i].x || vertexes[i].r_y != vertexes[i].y)
+        {
+            if (*first < 0)
+            {
+                *first = i;
+            }
+            n++;
+        }
+    }
+    return n;
+}
+
+static void PS3_LogVertexWords(const char *what, int i)
+{
+    const unsigned *w = (const unsigned *) &vertexes[i];
+
+    if (i >= 0 && i < numvertexes)
+    {
+        PS3_Log("[vtx]  %s: vertex %d at %p = %08x %08x %08x %08x", what, i,
+                (void *) w, w[0], w[1], w[2], w[3]);
+    }
+}
+
+static void PS3_VertexLoadCheck(int lump, const mapvertex_t *data)
+{
+    int len = W_LumpLength(lump), first, n, srcbad = 0, i;
+    mapvertex_t *fresh = malloc(len);
+    char where[256];
+
+    if (fresh)
+    {
+        W_ReadLump(lump, fresh);
+        srcbad = memcmp(fresh, data, len) != 0;
+        free(fresh);
+    }
+
+    n = PS3_VertexMismatches(data, &first);
+    if (!n && !srcbad)
+    {
+        return;
+    }
+
+    PS3_Log("[vtx] P_LoadVertexes: source %s the WAD (at %p), %d of %d vertexes "
+            "not what the loop wrote from it, first %d",
+            srcbad ? "DIFFERS from" : "matches", (const void *) data, n,
+            numvertexes, first);
+    PS3_LogVertexWords("now", first);
+    if (first >= 0)
+    {
+        PS3_Log("[vtx]  source for it: %04x %04x", (unsigned short) data[first].x,
+                (unsigned short) data[first].y);
+    }
+    Z_PS3_Describe(vertexes, where, sizeof(where));
+    PS3_Log("[vtx]  zone: %s", where);
+
+    // write them again, and watch them
+    for (i = 0; i < numvertexes; i++)
+    {
+        vertexes[i].x = vertexes[i].r_x = SHORT(data[i].x) << FRACBITS;
+        vertexes[i].y = vertexes[i].r_y = SHORT(data[i].y) << FRACBITS;
+    }
+    n = PS3_VertexMismatches(data, &first);
+    PS3_Log("[vtx]  written again: %d wrong at once", n);
+    I_Sleep(20);
+    n = PS3_VertexMismatches(data, &first);
+    PS3_Log("[vtx]  after 20 ms: %d wrong", n);
+    PS3_LogVertexWords("first", first);
+    I_Sleep(180);
+    n = PS3_VertexMismatches(data, &first);
+    PS3_Log("[vtx]  after 200 ms: %d wrong", n);
+    PS3_LogVertexWords("first", first);
+    if (first >= 0 && first + 1 < numvertexes)
+    {
+        PS3_LogVertexWords("next", first + 1);
+    }
+}
 
 #define PS3_NLUMPS 11       // ML_THINGS..ML_BEHAVIOR
 
@@ -397,6 +492,10 @@ void P_LoadVertexes(int lump)
         li->r_x = li->x;
         li->r_y = li->y;
     }
+
+#ifdef PS3_DEBUG_CHEATS
+    PS3_VertexLoadCheck(lump, (const mapvertex_t *) data);
+#endif
 
     W_ReleaseLumpNum(lump);
 }
