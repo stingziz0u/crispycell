@@ -18,9 +18,18 @@
 //
 // Plus a heartbeat every 30 s: frames per second, map, position, zone.
 //
+// And a watchdog: a thread of its own that looks at the frame count every
+// second. A game thread stuck in a loop or a lock doesn't die, so the join
+// never returns; if no frame has been drawn for WATCHDOG_S seconds, the
+// watchdog writes the same dump (the open calls are then where the game
+// thread is stuck), once. A level load takes a few seconds, far less.
+//
 
 #include <stdio.h>
 #include <stdint.h>
+
+#include <sys/thread.h>
+#include <sys/systime.h>
 
 #include "doomtype.h"
 #include "d_loop.h"
@@ -56,6 +65,40 @@ static uintptr_t    stack_lo, stack_hi;     // the game thread's stack
 static int          frames, beat_time, beat_frames;
 static int          dumped;
 
+#define WATCHDOG_S  20
+
+static volatile int watched_frames;     // frames, for the watchdog thread
+
+static void NO_TRACE Watchdog(void *arg)
+{
+    int last = -1, still = 0;
+
+    (void) arg;
+    for (;;)
+    {
+        sysUsleep(1000 * 1000);
+        if (dumped)
+        {
+            break;
+        }
+        // frames only start counting once the game draws
+        if (watched_frames == 0 || watched_frames != last)
+        {
+            last = watched_frames;
+            still = 0;
+            continue;
+        }
+        if (++still == WATCHDOG_S)
+        {
+            PS3_Log("[debug] watchdog: no frame for %d s, dumping the trail",
+                    WATCHDOG_S);
+            PS3_Debug_Dump("no frame drawn for 20 s (hang)");
+            break;
+        }
+    }
+    sysThreadExit(0);
+}
+
 void NO_TRACE __attribute__((noinline)) PS3_Crumb(const char *tag, int val)
 {
     crumb_t *c = &crumbs[crumb_n++ % NCRUMBS];
@@ -75,6 +118,15 @@ void NO_TRACE PS3_Debug_ThreadStart(void)
     stack_hi = (uintptr_t) &here + 4096;
     stack_lo = stack_hi - GAME_STACK;
     PS3_Log("[debug] debug package: crumbs and function trace on");
+
+    {
+        sys_ppu_thread_t tid;
+        s32 rc = sysThreadCreate(&tid, Watchdog, NULL, 1500, 64 * 1024,
+                                 0, (char *) "crispy_watchdog");
+
+        PS3_Log("[debug] watchdog thread: rc=%d (dump after %d s without a frame)",
+                (int) rc, WATCHDOG_S);
+    }
 }
 
 static inline int NO_TRACE OnGameThread(void)
@@ -111,6 +163,7 @@ void NO_TRACE PS3_Debug_Frame(void)
     int now = I_GetTimeMS();
 
     frames++;
+    watched_frames = frames;
     if (beat_time == 0)
     {
         beat_time = now;

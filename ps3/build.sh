@@ -8,6 +8,8 @@
 #   ./ps3/build.sh strife-debug   Strife with cheats on the pad (L3+R3 +
 #                                 triangle/square/cross/circle), same
 #                                 APPID: installs over the normal one
+#   ./ps3/build.sh hexen-debug    Hexen with the crash trail and the hang
+#                                 watchdog (src/i_ps3debug.c), same APPID
 #
 # Rewrites ps3/appid.mk, reconfigures cmake so the per-game defines are
 # picked up, builds, and packages -- in that order, with set -e, so a
@@ -29,7 +31,10 @@ case "$GAME" in
     strife-debug)
              GAME=strife; DEBUG=1; SUFFIX="-debug"
              APPID=CRISPSTRF; TITLE="Crispy Strife (debug)" ;;
-    *) echo "uso: $0 {doom|heretic|hexen|strife|strife-debug}"; exit 1 ;;
+    hexen-debug)
+             GAME=hexen; DEBUG=1; SUFFIX="-debug"
+             APPID=CRISPHEX1; TITLE="Crispy Hexen (debug)" ;;
+    *) echo "uso: $0 {doom|heretic|hexen|strife|strife-debug|hexen-debug}"; exit 1 ;;
 esac
 
 cat > "$ROOT/ps3/appid.mk" << EOF

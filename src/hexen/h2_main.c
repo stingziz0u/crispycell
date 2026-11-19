@@ -45,6 +45,7 @@
 #include "v_video.h"
 #include "w_main.h"
 #include "am_map.h"
+#include "i_ps3debug.h" // [PS3] the debug package's trail
 
 #include "hexen_icon.c"
 
@@ -1113,6 +1114,11 @@ void H2_ProcessEvents(void)
 
 static void DrawAndBlit(void)
 {
+#ifdef PS3_DEBUG_CHEATS
+    PS3_Debug_Frame();
+    PS3_CRUMB("DrawAndBlit", gamestate | (demoplayback << 4)
+                             | (MenuActive << 5) | (gametic << 8));
+#endif
     if (crispy->uncapped)
     {
         I_UpdateFracTic();

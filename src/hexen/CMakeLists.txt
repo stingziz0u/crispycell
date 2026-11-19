@@ -61,6 +61,19 @@ add_library(hexen STATIC
                                 textdefs.h
                                 xddefs.h)
 
+if(PS3_DEBUG)
+    # [PS3] Debug package (./ps3/build.sh hexen-debug): every Hexen
+    # function writes its entry and exit to a ring in memory, dumped to the
+    # log if the game thread dies or stops drawing (src/i_ps3debug.c).
+    # r_draw.c stays out: its column and span drawers are the inner loop
+    # of the renderer.
+    file(GLOB _ps3_ftrace RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/*.c")
+    list(REMOVE_ITEM _ps3_ftrace r_draw.c)
+    set_source_files_properties(${_ps3_ftrace} PROPERTIES
+                                COMPILE_OPTIONS "-finstrument-functions")
+endif()
+
+
 target_include_directories(hexen PRIVATE "../" "${CMAKE_CURRENT_BINARY_DIR}/../../")
 if (DEFINED EMSCRIPTEN)
     set(SDL_FLAGS "-s USE_SDL=2")
