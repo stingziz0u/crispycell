@@ -95,6 +95,25 @@ void Z_ClearZone (memzone_t* zone)
 
 
 
+#ifdef PS3_DEBUG_CHEATS
+#include <stdio.h>
+// [PS3] Debug package: the zone block holding ptr, and its neighbours
+// (who owns the memory around a block that got written over).
+void Z_PS3_Describe(const void *ptr, char *out, int n)
+{
+    const memblock_t *b = (const memblock_t *) ((const byte *) ptr - sizeof(memblock_t));
+    const memblock_t *p = b->prev, *x = b->next;
+
+    snprintf(out, n, "block %p size %d tag %d id %x user %p | prev %p size %d "
+             "tag %d user %p | next %p size %d tag %d user %p",
+             (const void *) b, b->size, b->tag, b->id, (void *) b->user,
+             (const void *) p, p ? p->size : 0, p ? p->tag : 0,
+             p ? (void *) p->user : NULL,
+             (const void *) x, x ? x->size : 0, x ? x->tag : 0,
+             x ? (void *) x->user : NULL);
+}
+#endif
+
 //
 // Z_Init
 //

@@ -123,6 +123,119 @@ static void PS3_VertexCheck(const char *where, int a, int b)
     }
 }
 #define PS3_VCHECK(where, a, b) PS3_VertexCheck((where), (a), (b))
+
+// Ren's third log: the vertexes are already wrong as P_LoadVertexes
+// fills them, from the VERTEXES lump still cached by the previous load of
+// the same map; a fresh read of it is right (and the cache too, by the
+// time PO_Init runs: it was purged and read again). So the cached copy
+// gets written over while the level is played. The cached lumps of the
+// map are copied once it is set up and compared every frame (and at the
+// next P_SetupLevel): the first frame that finds one changed says which
+// lump, which bytes, whose zone blocks are around it, and dumps the trail
+// (what ran in the last frames).
+void Z_PS3_Describe(const void *ptr, char *out, int n);     // z_zone.c
+
+#define PS3_NLUMPS 11       // ML_THINGS..ML_BEHAVIOR
+
+static struct
+{
+    int lump;
+    const byte *cache;
+    byte *copy;
+    int len;
+} ps3_watch[PS3_NLUMPS];
+static boolean ps3_watch_fired;
+
+static void PS3_WatchMapLumps(int lumpnum)
+{
+    int i;
+
+    for (i = 0; i < PS3_NLUMPS; i++)
+    {
+        int l = lumpnum + 1 + i;
+
+        free(ps3_watch[i].copy);
+        ps3_watch[i].copy = NULL;
+        ps3_watch[i].cache = lumpinfo[l]->cache;
+        ps3_watch[i].lump = l;
+        ps3_watch[i].len = W_LumpLength(l);
+        if (ps3_watch[i].cache && ps3_watch[i].len > 0)
+        {
+            ps3_watch[i].copy = malloc(ps3_watch[i].len);
+            if (ps3_watch[i].copy)
+            {
+                memcpy(ps3_watch[i].copy, ps3_watch[i].cache, ps3_watch[i].len);
+            }
+        }
+    }
+}
+
+void PS3_CheckMapLumps(const char *when)
+{
+    int i, j;
+
+    if (ps3_watch_fired)
+    {
+        return;
+    }
+    for (i = 0; i < PS3_NLUMPS; i++)
+    {
+        int diff = 0, first = -1, last = -1;
+        char where[256];
+
+        if (!ps3_watch[i].copy)
+        {
+            continue;
+        }
+        if (lumpinfo[ps3_watch[i].lump]->cache != ps3_watch[i].cache)
+        {
+            // purged (or read again elsewhere): nothing to compare any more
+            free(ps3_watch[i].copy);
+            ps3_watch[i].copy = NULL;
+            continue;
+        }
+        for (j = 0; j < ps3_watch[i].len; j++)
+        {
+            if (ps3_watch[i].cache[j] != ps3_watch[i].copy[j])
+            {
+                if (first < 0)
+                {
+                    first = j;
+                }
+                last = j;
+                diff++;
+            }
+        }
+        if (!diff)
+        {
+            continue;
+        }
+
+        ps3_watch_fired = true;
+        PS3_Log("[lump] %.8s (lump %d, %d bytes at %p) WRITTEN OVER, found %s "
+                "at tic %d: %d bytes differ, offsets %d..%d",
+                lumpinfo[ps3_watch[i].lump]->name, ps3_watch[i].lump,
+                ps3_watch[i].len, (void *) ps3_watch[i].cache, when, gametic,
+                diff, first, last);
+        for (j = first; j <= last && j < first + 64; j += 16)
+        {
+            int k;
+            char a[64], b[64];
+
+            for (k = 0; k < 16 && j + k < ps3_watch[i].len; k++)
+            {
+                snprintf(a + k * 2, 3, "%02x", ps3_watch[i].copy[j + k]);
+                snprintf(b + k * 2, 3, "%02x", ps3_watch[i].cache[j + k]);
+            }
+            PS3_Log("[lump]  +%d was %s", j, a);
+            PS3_Log("[lump]  +%d now %s", j, b);
+        }
+        Z_PS3_Describe(ps3_watch[i].cache, where, sizeof(where));
+        PS3_Log("[lump]  zone: %s", where);
+        PS3_Debug_Dump("a cached map lump was written over");
+        return;
+    }
+}
 #else
 #define PS3_VCHECK(where, a, b) ((void) 0)
 #endif
@@ -944,6 +1057,10 @@ void P_SetupLevel(int episode, int map, int playermask, skill_t skill)
     boolean crispy_validblockmap;
     mapformat_t crispy_mapformat;
 
+#ifdef PS3_DEBUG_CHEATS
+    PS3_CheckMapLumps("as the next map starts loading");
+#endif
+
     for (i = 0; i < maxplayers; i++)
     {
         players[i].killcount = players[i].secretcount
@@ -1133,6 +1250,10 @@ void P_SetupLevel(int episode, int map, int playermask, skill_t skill)
     R_ClearPlanes();
     R_ClearSprites();
 
+#ifdef PS3_DEBUG_CHEATS
+    PS3_WatchMapLumps(lumpnum);
+    PS3_CheckMapLumps("right after P_SetupLevel");
+#endif
 }
 
 //==========================================================================

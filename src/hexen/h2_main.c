@@ -1115,6 +1115,11 @@ void H2_ProcessEvents(void)
 static void DrawAndBlit(void)
 {
 #ifdef PS3_DEBUG_CHEATS
+    {
+        extern void PS3_CheckMapLumps(const char *when);   // p_setup.c
+
+        PS3_CheckMapLumps("drawing a frame");
+    }
     PS3_Debug_Frame();
     PS3_CRUMB("DrawAndBlit", gamestate | (demoplayback << 4)
                              | (MenuActive << 5) | (gametic << 8));
