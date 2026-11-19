@@ -30,6 +30,10 @@
 #include "p_rejectpad.h"
 #include "p_mapformat.h"
 #include "r_gpu.h" // [PS3]
+#include "i_ps3debug.h" // [PS3]
+
+// [PS3] The map lump being set up (po_man.c's diagnostics re-read it).
+int ps3_maplump = -1;
 
 // MACROS ------------------------------------------------------------------
 
@@ -874,6 +878,9 @@ void P_SetupLevel(int episode, int map, int playermask, skill_t skill)
 
     crispy_mapformat = P_CheckMapFormat(lumpnum);
     maplumpinfo = lumpinfo[lumpnum];
+    ps3_maplump = lumpnum;
+    PS3_DEBUG_LOG("[map] P_SetupLevel: map %d (lump %d), demo %d, zone free %d KB",
+                  map, lumpnum, demoplayback, Z_FreeMemory() / 1024);
 
     //
     // Begin processing map lumps

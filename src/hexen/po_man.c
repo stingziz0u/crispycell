@@ -25,6 +25,8 @@
 #include "r_local.h"
 
 #include "crispy.h"
+#include "i_ps3debug.h" // [PS3]
+#include "p_mapformat.h" // [PS3] mapseg_t, for the debug package
 
 // MACROS ------------------------------------------------------------------
 
@@ -1358,32 +1360,208 @@ static void InitBlockMap(void)
 //      count the number of segs in the polyobj
 //==========================================================================
 
-static void IterFindPolySegs(int x, int y, seg_t ** segList)
-{
-    int i;
+extern int ps3_maplump;     // [PS3] p_setup.c: the map lump being set up
 
-    if (x == PolyStartX && y == PolyStartY)
+#ifdef PS3_DEBUG_CHEATS
+// [PS3] Debug package: a polyobj chain that never comes back to its start
+// (the game thread died of IterFindPolySegs recursing forever, choosing
+// the skill during the demo). What the chain went through, and whether
+// the map data in memory still is what the WAD has: vertexes and segs
+// against a fresh read of their lumps, and the zone's cached copy of
+// those lumps against the same read.
+static int ps3_po_tag;
+
+static void PS3_CompareLump(const char *what, int lump)
+{
+    int len = W_LumpLength(lump), diff = 0, first = -1, i;
+    byte *fresh = malloc(len);
+    const byte *cached;
+
+    if (!fresh)
     {
         return;
     }
-    for (i = 0; i < numsegs; i++)
+    W_ReadLump(lump, fresh);
+    cached = W_CacheLumpNum(lump, PU_STATIC);
+    for (i = 0; i < len; i++)
     {
-        if (segs[i].linedef && // [crispy] extended nodes
-            segs[i].v1->x == x && segs[i].v1->y == y)
+        if (cached[i] != fresh[i])
         {
-            if (!segList)
+            if (first < 0)
             {
-                PolySegCount++;
+                first = i;
             }
-            else
-            {
-                *segList++ = &segs[i];
-            }
-            IterFindPolySegs(segs[i].v2->x, segs[i].v2->y, segList);
-            return;
+            diff++;
         }
     }
-    I_Error("IterFindPolySegs:  Non-closed Polyobj located.\n");
+    W_ReleaseLumpNum(lump);
+    PS3_Log("[po] %s lump %d: %d bytes, cached copy differs in %d (first at %d)",
+            what, lump, len, diff, first);
+    free(fresh);
+}
+
+static void PS3_PolyChainDiag(int steps)
+{
+    int i, n, bad;
+
+    PS3_Log("[po] polyobj %d: chain doesn't close after %d segs: start (%d,%d), "
+            "map lump %d, demo %d, numsegs %d, numvertexes %d",
+            ps3_po_tag, steps, PolyStartX >> FRACBITS, PolyStartY >> FRACBITS,
+            ps3_maplump, demoplayback, numsegs, numvertexes);
+
+    // the chain again, its first steps
+    {
+        int x = PolyStartX, y = PolyStartY;
+
+        for (n = 0; n < 24; n++)
+        {
+            for (i = 0; i < numsegs; i++)
+            {
+                if (segs[i].linedef && segs[i].v1->x == x && segs[i].v1->y == y)
+                {
+                    break;
+                }
+            }
+            if (i == numsegs)
+            {
+                break;
+            }
+            PS3_Log("[po]  seg %d: (%d,%d) -> (%d,%d), line %d special %d arg1 %d",
+                    i, segs[i].v1->x >> FRACBITS, segs[i].v1->y >> FRACBITS,
+                    segs[i].v2->x >> FRACBITS, segs[i].v2->y >> FRACBITS,
+                    (int) (segs[i].linedef - lines), segs[i].linedef->special,
+                    segs[i].linedef->arg1);
+            x = segs[i].v2->x;
+            y = segs[i].v2->y;
+        }
+    }
+
+    if (ps3_maplump < 0)
+    {
+        return;
+    }
+
+    // the vertexes in memory against the WAD
+    {
+        int lump = ps3_maplump + ML_VERTEXES;
+        int len = W_LumpLength(lump);
+        mapvertex_t *mv = malloc(len);
+
+        if (mv)
+        {
+            W_ReadLump(lump, mv);
+            for (i = 0, bad = 0; i < numvertexes && i < len / (int) sizeof(mapvertex_t); i++)
+            {
+                if (vertexes[i].x != SHORT(mv[i].x) << FRACBITS
+                 || vertexes[i].y != SHORT(mv[i].y) << FRACBITS)
+                {
+                    if (bad < 5)
+                    {
+                        PS3_Log("[po]  vertex %d: (%d,%d) in memory, (%d,%d) in the WAD",
+                                i, vertexes[i].x >> FRACBITS, vertexes[i].y >> FRACBITS,
+                                SHORT(mv[i].x), SHORT(mv[i].y));
+                    }
+                    bad++;
+                }
+            }
+            PS3_Log("[po] vertexes: %d of %d differ from the WAD (polyobjs of "
+                    "this map not moved yet)", bad, numvertexes);
+            free(mv);
+        }
+        PS3_CompareLump("VERTEXES", lump);
+    }
+
+    // the segs' vertexes and lines against the WAD (vanilla nodes only)
+    {
+        int lump = ps3_maplump + ML_SEGS;
+        int len = W_LumpLength(lump);
+
+        if (len / (int) sizeof(mapseg_t) == numsegs)
+        {
+            mapseg_t *ms = malloc(len);
+
+            if (ms)
+            {
+                W_ReadLump(lump, ms);
+                for (i = 0, bad = 0; i < numsegs; i++)
+                {
+                    if (segs[i].v1 != &vertexes[(unsigned short) SHORT(ms[i].v1)]
+                     || segs[i].v2 != &vertexes[(unsigned short) SHORT(ms[i].v2)]
+                     || segs[i].linedef != &lines[(unsigned short) SHORT(ms[i].linedef)])
+                    {
+                        if (bad < 5)
+                        {
+                            PS3_Log("[po]  seg %d: v %d,%d line %d in memory, "
+                                    "v %d,%d line %d in the WAD", i,
+                                    (int) (segs[i].v1 - vertexes),
+                                    (int) (segs[i].v2 - vertexes),
+                                    segs[i].linedef ? (int) (segs[i].linedef - lines) : -1,
+                                    (unsigned short) SHORT(ms[i].v1),
+                                    (unsigned short) SHORT(ms[i].v2),
+                                    (unsigned short) SHORT(ms[i].linedef));
+                        }
+                        bad++;
+                    }
+                }
+                PS3_Log("[po] segs: %d of %d differ from the WAD", bad, numsegs);
+                free(ms);
+            }
+        }
+        else
+        {
+            PS3_Log("[po] segs: %d in memory, %d in the lump (other node format)",
+                    numsegs, len / (int) sizeof(mapseg_t));
+        }
+        PS3_CompareLump("SEGS", lump);
+    }
+}
+#endif
+
+// [PS3] A loop instead of the recursion, the same walk: a chain that
+// never comes back to its start ends in an error (and, in the debug
+// package, in the diagnostics above) instead of overflowing the stack,
+// which killed the game thread with the screen frozen.
+static void IterFindPolySegs(int x, int y, seg_t ** segList)
+{
+    int i, steps = 0;
+
+    for (;;)
+    {
+        if (x == PolyStartX && y == PolyStartY)
+        {
+            return;
+        }
+        for (i = 0; i < numsegs; i++)
+        {
+            if (segs[i].linedef && // [crispy] extended nodes
+                segs[i].v1->x == x && segs[i].v1->y == y)
+            {
+                break;
+            }
+        }
+        if (i == numsegs)
+        {
+            I_Error("IterFindPolySegs:  Non-closed Polyobj located.\n");
+        }
+        if (!segList)
+        {
+            PolySegCount++;
+        }
+        else
+        {
+            *segList++ = &segs[i];
+        }
+        if (++steps > numsegs)
+        {
+#ifdef PS3_DEBUG_CHEATS
+            PS3_PolyChainDiag(steps);
+#endif
+            I_Error("IterFindPolySegs: a polyobj's lines never come back to "
+                    "its start (map lump %d)", ps3_maplump);
+        }
+        x = segs[i].v2->x;
+        y = segs[i].v2->y;
+    }
 }
 
 
@@ -1416,6 +1594,9 @@ static void SpawnPolyobj(int index, int tag, boolean crush)
             PolySegCount = 1;
             PolyStartX = segs[i].v1->x;
             PolyStartY = segs[i].v1->y;
+#ifdef PS3_DEBUG_CHEATS
+            ps3_po_tag = tag;
+#endif
             IterFindPolySegs(segs[i].v2->x, segs[i].v2->y, NULL);
 
             polyobjs[index].numsegs = PolySegCount;
