@@ -35,6 +35,98 @@
 // [PS3] The map lump being set up (po_man.c's diagnostics re-read it).
 int ps3_maplump = -1;
 
+#ifdef PS3_DEBUG_CHEATS
+// [PS3] Debug package: the vertexes change between P_LoadVertexes and
+// PO_Init (half of them, in Ren's log, with the cached lump intact). A
+// copy of them is taken right after loading, and every step of the setup
+// after it compares: the first step that finds them changed says who did
+// it (a loader, a thing spawned, or something else running meanwhile).
+static fixed_t *ps3_vcopy;
+static int ps3_vcopy_n;
+static boolean ps3_vchanged;
+
+static void PS3_VertexSnapshot(void)
+{
+    int i;
+
+    free(ps3_vcopy);
+    ps3_vcopy = malloc(numvertexes * 2 * sizeof(fixed_t));
+    ps3_vcopy_n = ps3_vcopy ? numvertexes : 0;
+    ps3_vchanged = false;
+    for (i = 0; i < ps3_vcopy_n; i++)
+    {
+        ps3_vcopy[2 * i] = vertexes[i].x;
+        ps3_vcopy[2 * i + 1] = vertexes[i].y;
+    }
+    PS3_Log("[vtx] %d vertexes at %p..%p", numvertexes, (void *) vertexes,
+            (void *) (vertexes + numvertexes));
+
+    // already wrong when loaded? (against a fresh read of the lump)
+    if (ps3_maplump >= 0)
+    {
+        int lump = ps3_maplump + ML_VERTEXES;
+        int len = W_LumpLength(lump), bad = 0;
+        mapvertex_t *mv = malloc(len);
+
+        if (mv)
+        {
+            W_ReadLump(lump, mv);
+            for (i = 0; i < numvertexes && i < len / (int) sizeof(mapvertex_t); i++)
+            {
+                if (vertexes[i].x != SHORT(mv[i].x) << FRACBITS
+                 || vertexes[i].y != SHORT(mv[i].y) << FRACBITS)
+                {
+                    bad++;
+                }
+            }
+            free(mv);
+            if (bad)
+            {
+                PS3_Log("[vtx] %d vertexes already differ from the WAD when loaded", bad);
+            }
+        }
+    }
+}
+
+static void PS3_VertexCheck(const char *where, int a, int b)
+{
+    int i, n = 0;
+
+    if (ps3_vchanged || !ps3_vcopy)
+    {
+        return;
+    }
+    for (i = 0; i < ps3_vcopy_n; i++)
+    {
+        if (vertexes[i].x != ps3_vcopy[2 * i] || vertexes[i].y != ps3_vcopy[2 * i + 1])
+        {
+            if (n < 6)
+            {
+                PS3_Log("[vtx]  vertex %d at %p: (%08x,%08x), was (%08x,%08x)", i,
+                        (void *) &vertexes[i], vertexes[i].x, vertexes[i].y,
+                        ps3_vcopy[2 * i], ps3_vcopy[2 * i + 1]);
+            }
+            n++;
+        }
+    }
+    if (n)
+    {
+        ps3_vchanged = true;
+        PS3_Log("[vtx] CHANGED after %s (%d, %d): %d of %d vertexes", where, a, b,
+                n, ps3_vcopy_n);
+        PS3_Log("[vtx] blocks: vertexes %p sectors %p sides %p lines %p segs %p "
+                "subsectors %p nodes %p blockmap %p blocklinks %p reject %p",
+                (void *) vertexes, (void *) sectors, (void *) sides,
+                (void *) lines, (void *) segs, (void *) subsectors,
+                (void *) nodes, (void *) blockmaplump, (void *) blocklinks,
+                (void *) rejectmatrix);
+    }
+}
+#define PS3_VCHECK(where, a, b) PS3_VertexCheck((where), (a), (b))
+#else
+#define PS3_VCHECK(where, a, b) ((void) 0)
+#endif
+
 // MACROS ------------------------------------------------------------------
 
 #define MAPINFO_SCRIPT_NAME "MAPINFO"
@@ -475,6 +567,7 @@ void P_LoadThings(int lump)
         spawnthing.arg5 = mt->arg5;
 
         P_SpawnMapThing(&spawnthing);
+        PS3_VCHECK("spawning a thing (index, type)", i, spawnthing.type);
     }
     P_CreateTIDList();
     P_InitCreatureCorpseQueue(false);   // false = do NOT scan for corpses
@@ -888,9 +981,15 @@ void P_SetupLevel(int episode, int map, int playermask, skill_t skill)
     //
     crispy_validblockmap = P_LoadBlockMap(lumpnum + ML_BLOCKMAP); // [crispy] (re-)create BLOCKMAP if necessary
     P_LoadVertexes(lumpnum + ML_VERTEXES);
+#ifdef PS3_DEBUG_CHEATS
+    PS3_VertexSnapshot();
+#endif
     P_LoadSectors(lumpnum + ML_SECTORS);
+    PS3_VCHECK("P_LoadSectors", 0, 0);
     P_LoadSideDefs(lumpnum + ML_SIDEDEFS);
+    PS3_VCHECK("P_LoadSideDefs", 0, 0);
     P_LoadLineDefs(lumpnum + ML_LINEDEFS);
+    PS3_VCHECK("P_LoadLineDefs", 0, 0);
 
 
     // [crispy] (re-)create BLOCKMAP if necessary
@@ -898,6 +997,7 @@ void P_SetupLevel(int episode, int map, int playermask, skill_t skill)
     {
         P_CreateBlockMap();
     }
+    PS3_VCHECK("P_CreateBlockMap", crispy_validblockmap, 0);
 
     if (crispy_mapformat.bsp >= NFMT_XNOD)
     {
@@ -919,16 +1019,21 @@ void P_SetupLevel(int episode, int map, int playermask, skill_t skill)
     P_LoadSegs(lumpnum + ML_SEGS);
     }
 
+    PS3_VCHECK("the nodes, subsectors and segs", 0, 0);
     P_GroupLines();
+    PS3_VCHECK("P_GroupLines", 0, 0);
 
     // [crispy] fix long wall wobble
     P_SegLengths();
+    PS3_VCHECK("P_SegLengths", 0, 0);
 
     P_LoadReject(lumpnum + ML_REJECT);
+    PS3_VCHECK("P_LoadReject", 0, 0);
     bodyqueslot = 0;
     po_NumPolyobjs = 0;
     deathmatch_p = deathmatchstarts;
     P_LoadThings(lumpnum + ML_THINGS);
+    PS3_VCHECK("P_LoadThings", 0, 0);
     PO_Init(lumpnum + ML_THINGS);       // Initialize the polyobjs
     P_LoadACScripts(lumpnum + ML_BEHAVIOR);     // ACS object code
     //
