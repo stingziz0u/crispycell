@@ -764,6 +764,59 @@ int PSpriteSY[NUMCLASSES][NUMWEAPONS] = {
 
 boolean pspr_interp = true; // [crispy] interpolate weapon bobbing
 
+// [PS3] Many Hexen weapons are drawn against a side of the 4:3 screen
+// (their art ends at x 0 or 320). In widescreen that edge is inside the
+// view, so the weapon stops short of the screen's side and looks cut off.
+// As VoidSW's RS_ALIGN_L / RS_ALIGN_R (EDuke32-PS3 patch 35), such a
+// weapon moves out to the wide screen's edge by the extra width. Decided
+// once per weapon, from its ready frame at rest (sx 1.0), and applied to
+// all its frames and its flash, so attacks don't jump sideways between
+// frames. Returns the shift in 320-wide units (0 in 4:3).
+static fixed_t R_PSpriteWideShift(void)
+{
+    const weaponinfo_t *wi;
+    const state_t *st;
+    const spritedef_t *sd;
+    fixed_t left, right, delta;
+    int lump;
+
+    // the view's width in 320-wide units (pspritescale is the 4:3 part's
+    // scale, R_ExecuteSetViewSize), minus 320, split between the sides
+    if (!viewplayer || pspritescale <= 0)
+    {
+        return 0;
+    }
+    delta = (FixedDiv(viewwidth << FRACBITS, pspritescale) - (ORIGWIDTH << FRACBITS)) / 2;
+    if (delta < FRACUNIT)
+    {
+        return 0;
+    }
+
+    wi = &WeaponInfo[viewplayer->readyweapon][viewplayer->class];
+    st = &states[wi->readystate];
+    sd = &sprites[st->sprite];
+
+    if ((st->frame & FF_FRAMEMASK) >= sd->numframes)
+    {
+        return 0;
+    }
+
+    lump = sd->spriteframes[st->frame & FF_FRAMEMASK].lump[0];
+    left = FRACUNIT - spriteoffset[lump];
+    right = left + spritewidth[lump];
+
+    // within 2 columns of a side, and not across the whole screen
+    if (left <= 2 * FRACUNIT && right < (ORIGWIDTH - 2) * FRACUNIT)
+    {
+        return -delta;
+    }
+    if (right >= (ORIGWIDTH - 2) * FRACUNIT && left > 2 * FRACUNIT)
+    {
+        return delta;
+    }
+    return 0;
+}
+
 void R_DrawPSprite(pspdef_t * psp, int translucent) // [crispy] translucency for weapon flash translucency
 {
     fixed_t tx;
@@ -801,6 +854,7 @@ void R_DrawPSprite(pspdef_t * psp, int translucent) // [crispy] translucency for
     tx = psp->sx2 - 160 * FRACUNIT;
 
     tx -= spriteoffset[lump];
+    tx += R_PSpriteWideShift(); // [PS3]
     if (viewangleoffset)
     {
         tempangle =
