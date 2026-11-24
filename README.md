@@ -402,6 +402,40 @@ MIDI, so neither synth applies to it: it always plays as recorded,
 whichever option is chosen, and switching the option does not interrupt
 it. Songs that are MIDI or MUS keep using the chosen synth.
 
+### Music packs
+
+Recorded versions of the soundtrack — such as the Roland SC-55 packs of
+[sc55.duke4.net](https://sc55.duke4.net/) — play instead of the MIDI when
+they are in:
+
+- `/dev_hdd0/data/crispycell/music/doom/` (or `heretic/`, `hexen/`,
+  `strife/`) for one game, or
+- `/dev_hdd0/data/crispycell/music/` for all of them.
+
+The files can be **Ogg Vorbis** or **MP3** (FLAC is not played: convert it,
+or use the pack's Ogg version). Each song is found the way Chocolate Doom
+does it:
+
+1. A pack's `.cfg` files in that folder (`<SHA1> = <file>`, the format of
+   the [chocolate-doom/music-packs](https://github.com/chocolate-doom/music-packs)
+   configs). A `.cfg` that names a `.flac` also tries the same name in
+   `.ogg` and `.mp3`.
+2. Otherwise, the file name of the original song: `d_e1m1.ogg`,
+   `d_runnin.ogg`, `mus_e1m1.ogg`, `winnowr.ogg`... with or without the
+   `d_` / `mus_` prefix. A zipped pack can be unpacked as it is: a
+   `music/` folder inside is searched too.
+3. New music in a PWAD: by the name of its lump (`D_MYSONG.ogg`).
+
+Names are matched without case. Loop points are read from the file's
+tags (`LOOP_START` / `LOOP_END`, or `LOOPSTART` / `LOOPLENGTH`); without
+them the song loops from the top. A pack song plays whatever the Music
+option says, and songs the pack does not have use the chosen synth. The
+log lists what was found (`[musicpack]`). To go back to the MIDI, move
+the folder away.
+
+A pack that comes as a WAD (such as `kexdoom_sc55_ogg.wad`) needs none of
+this: load it as a PWAD, its Ogg lumps play as recorded.
+
 ## Renderer
 
 Options -> Crispness -> page 1 (Rendering), in all four games:

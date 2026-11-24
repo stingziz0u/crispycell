@@ -76,6 +76,10 @@
 
 extern void PS3_Log(const char *fmt, ...);
 
+// i_ps3musicpack.c: recorded versions of the MIDI songs in a folder.
+extern void PS3MusicPack_Init(void);
+extern const char *PS3MusicPack_Find(const void *data, int len);
+
 #define SF2_DIR     "/dev_hdd0/data/crispycell"     // shared by the 4 games
 #define SF2_RATE    48000       // the audio port's (opl_ps3.c)
 #define SF2_VOICES  64
@@ -124,6 +128,8 @@ typedef struct
     int         start;      // MP3: the first frame, after an ID3v2 tag
     stb_vorbis *vorbis;     // Ogg: its decoder (made when registered)
     void       *vorbis_mem; // and all the memory it uses
+    int         loop_start; // Ogg: sample to loop back to (tags), 0 = top
+    int         loop_end;   // Ogg: sample the loop ends at, -1 = the end
 } track_t;
 
 static track_t *tracks[MAX_SONGS];
@@ -143,6 +149,7 @@ static unsigned int  trk_frac;      // position between trk_a and trk_b, 16.16
 static float         trk_a[2], trk_b[2];
 static unsigned int  trk_out_frames; // mixed since the start, for the log
 static boolean       trk_ended;     // ran out of frames (not looping)
+static int           trk_pos;       // Ogg: samples decoded so far (loop tags)
 
 static void Lock(void)
 {
@@ -283,6 +290,12 @@ static int DecodeFrame(void)
         float **out;
         int ch;
 
+        // A music pack song with loop tags: the loop ends at LOOP_END
+        // (only when looping: played once, it goes to the end).
+        if (trk_looping && trk_cur->loop_end > 0 && trk_pos >= trk_cur->loop_end)
+        {
+            return -1;
+        }
         n = stb_vorbis_get_frame_float(trk_cur->vorbis, &ch, &out);
         if (n <= 0)
         {
@@ -292,6 +305,11 @@ static int DecodeFrame(void)
         {
             n = TRK_BUF_FRAMES;
         }
+        if (trk_looping && trk_cur->loop_end > 0 && trk_pos + n > trk_cur->loop_end)
+        {
+            n = trk_cur->loop_end - trk_pos;
+        }
+        trk_pos += n;
         for (i = 0; i < n; i++)
         {
             trk_buf[i * 2] = out[0][i];
@@ -341,6 +359,7 @@ static void Rewind(void)
     if (trk_cur->ogg)
     {
         stb_vorbis_seek_start(trk_cur->vorbis);
+        trk_pos = 0;
     }
     else
     {
@@ -368,7 +387,17 @@ static boolean TrackPull(float out[2])
             {
                 return false;
             }
-            Rewind();
+            if (trk_cur->ogg && trk_cur->loop_start > 0
+             && stb_vorbis_seek(trk_cur->vorbis, trk_cur->loop_start))
+            {
+                // the loop tags: back to LOOP_START, not to the top
+                trk_pos = trk_cur->loop_start;
+                trk_frames = trk_next = 0;
+            }
+            else
+            {
+                Rewind();
+            }
             restarted = true;
             continue;
         }
@@ -569,21 +598,113 @@ static boolean OpenVorbis(track_t *song)
     return false;
 }
 
-static void *RegisterTrack(const void *data, int len, boolean ogg)
+// A loop tag value: samples ("441000") or a time ("1:23.5", "83.5").
+static int LoopTagSamples(const char *value, unsigned int rate)
+{
+    double secs = 0.0, part;
+    const char *p = value;
+
+    if (strchr(value, ':') == NULL && strchr(value, '.') == NULL)
+    {
+        return atoi(value);
+    }
+
+    // [[hh:]mm:]ss[.fff]
+    for (;;)
+    {
+        part = strtod(p, (char **) &p);
+        if (*p == ':')
+        {
+            secs = (secs + part) * 60.0;
+            p++;
+        }
+        else
+        {
+            secs += part;
+            break;
+        }
+    }
+
+    return (int) (secs * rate);
+}
+
+// The loop points of a music pack song, from its Vorbis comments: ZDoom's
+// LOOP_START / LOOP_END, or LOOPSTART / LOOPLENGTH (in samples).
+static void ReadLoopTags(track_t *song, unsigned int rate)
+{
+    stb_vorbis_comment c = stb_vorbis_get_comment(song->vorbis);
+    int i, length = -1;
+
+    song->loop_start = 0;
+    song->loop_end = -1;
+
+    for (i = 0; i < c.comment_list_length; i++)
+    {
+        const char *kv = c.comment_list[i];
+        const char *eq = strchr(kv, '=');
+        size_t n;
+
+        if (eq == NULL)
+        {
+            continue;
+        }
+        n = eq - kv;
+
+        if (n == 10 && strncasecmp(kv, "LOOP_START", n) == 0)
+        {
+            song->loop_start = LoopTagSamples(eq + 1, rate);
+        }
+        else if (n == 8 && strncasecmp(kv, "LOOP_END", n) == 0)
+        {
+            song->loop_end = LoopTagSamples(eq + 1, rate);
+        }
+        else if (n == 9 && strncasecmp(kv, "LOOPSTART", n) == 0)
+        {
+            song->loop_start = atoi(eq + 1);
+        }
+        else if (n == 10 && strncasecmp(kv, "LOOPLENGTH", n) == 0)
+        {
+            length = atoi(eq + 1);
+        }
+    }
+
+    if (length > 0)
+    {
+        song->loop_end = song->loop_start + length;
+    }
+    if (song->loop_start < 0)
+    {
+        song->loop_start = 0;
+    }
+    if (song->loop_end >= 0 && song->loop_end <= song->loop_start)
+    {
+        song->loop_end = -1;
+    }
+
+    if (song->loop_start > 0 || song->loop_end > 0)
+    {
+        PS3_Log("[music] loop tags: from sample %d to %d", song->loop_start,
+                song->loop_end);
+    }
+}
+
+// Takes data (malloc'd) as the song's own.
+static void *RegisterTrackOwned(byte *data, int len, boolean ogg)
 {
     track_t *song;
     int i;
 
     song = calloc(1, sizeof(*song));
-    if (song == NULL || (song->data = malloc(len)) == NULL)
+    if (song == NULL)
     {
         PS3_Log("[music] out of memory for a %d KB song", len / 1024);
-        free(song);
+        free(data);
         return NULL;
     }
-    memcpy(song->data, data, len);
+    song->data = data;
     song->len = len;
     song->ogg = ogg;
+    song->loop_end = -1;
 
     if (ogg)
     {
@@ -602,6 +723,7 @@ static void *RegisterTrack(const void *data, int len, boolean ogg)
             FreeTrackData(song);
             return NULL;
         }
+        ReadLoopTags(song, info.sample_rate);
     }
     else
     {
@@ -627,6 +749,68 @@ static void *RegisterTrack(const void *data, int len, boolean ogg)
     }
 
     return song;
+}
+
+static void *RegisterTrack(const void *data, int len, boolean ogg)
+{
+    byte *copy = malloc(len);
+
+    if (copy == NULL)
+    {
+        PS3_Log("[music] out of memory for a %d KB song", len / 1024);
+        return NULL;
+    }
+    memcpy(copy, data, len);
+
+    return RegisterTrackOwned(copy, len, ogg);
+}
+
+// A music pack file (i_ps3musicpack.c) instead of the MIDI lump.
+static void *RegisterPackFile(const char *path)
+{
+    mp3dec_frame_info_t info;
+    FILE *f;
+    long size;
+    byte *data;
+
+    f = fopen(path, "rb");
+    if (f == NULL)
+    {
+        PS3_Log("[musicpack] can't open %s", path);
+        return NULL;
+    }
+    fseek(f, 0, SEEK_END);
+    size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (size <= 4 || size > 64 * 1024 * 1024 || (data = malloc(size)) == NULL)
+    {
+        PS3_Log("[musicpack] %s: %ld bytes, can't load it", path, size);
+        fclose(f);
+        return NULL;
+    }
+    if (fread(data, 1, size, f) != (size_t) size)
+    {
+        PS3_Log("[musicpack] %s: read error", path);
+        fclose(f);
+        free(data);
+        return NULL;
+    }
+    fclose(f);
+
+    PS3_Log("[musicpack] %s", path);
+
+    if (memcmp(data, "OggS", 4) == 0)
+    {
+        return RegisterTrackOwned(data, (int) size, true);
+    }
+    if (IsMp3(data, (int) size, &info))
+    {
+        return RegisterTrackOwned(data, (int) size, false);
+    }
+
+    PS3_Log("[musicpack] %s: not Ogg Vorbis or MP3 (FLAC is not played)", path);
+    free(data);
+    return NULL;
 }
 
 static void FreeTrack(track_t *song)
@@ -875,6 +1059,8 @@ static boolean PS3Music_Init(void)
     PS3_Log("[music] %d SoundFont(s) in %s, chosen: %s", sf2_count, SF2_DIR,
             ps3_music_sf2[0] ? ps3_music_sf2 : "OPL");
 
+    PS3MusicPack_Init();
+
     if (ps3_music_sf2[0] != '\0' && sf2_mutex_ready)
     {
         tsf *f = LoadSoundFont(ps3_music_sf2);
@@ -966,7 +1152,16 @@ static void *PS3Music_RegisterSong(void *data, int len)
     const byte *b = data;
     void *handle;
     tml_message *midi;
+    const char *pack;
     int i;
+
+    // A music pack has this song: the recording instead of the MIDI,
+    // whatever the Music setting (like a song recorded in the WAD).
+    if ((pack = PS3MusicPack_Find(data, len)) != NULL
+     && (handle = RegisterPackFile(pack)) != NULL)
+    {
+        return handle;
+    }
 
     if (len >= 4 && memcmp(data, "MThd", 4) != 0 && memcmp(data, "MUS\x1a", 4) != 0)
     {
