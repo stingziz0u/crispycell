@@ -49,6 +49,7 @@
 extern void PS3_Log(const char *fmt, ...);
 
 #define PACK_ROOT PS3_USRDIR "/music-packs"
+#define PACK_SHARED "/dev_hdd0/data/crispycell/music"
 
 #if defined(PS3_GAME_HERETIC)
 #define PACK_GAME "heretic"
@@ -755,9 +756,12 @@ void PS3MusicPack_Init(void)
     }
     initialized = true;
 
-    // USRDIR/music-packs of this game (made by the PKG): the packs, each in
-    // a folder of its own or straight in it. A song no pack has stays MIDI.
+    // USRDIR/music-packs of this game (made by the PKG), then
+    // /dev_hdd0/data/crispycell/music for the four games: the packs, each
+    // in a folder of its own (doom1/, doom2/, heretic/...) or straight in.
+    // Each song is looked for in all of them; one no pack has stays MIDI.
     ScanDir(PACK_ROOT, 0);
+    ScanDir(PACK_SHARED, 0);
 
     if (num_dirs == 0)
     {

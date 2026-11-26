@@ -37,6 +37,10 @@ Doom (id Software, 1997) -> Chocolate Doom -> Crispy Doom -> CrispyCell (this pr
   SoundFont (`.sf2`) you copy to the console, such as
   [GeneralUser GS](https://www.schristiancollins.com/generaluser.php).
   See [Music](#music).
+- **Music packs:** recorded soundtracks (Ogg, MP3 or FLAC, such as the
+  SC-55 packs of sc55.duke4.net) play instead of the MIDI, one folder per
+  pack, switchable with OPL and the SoundFonts from the menu. See
+  [Music packs](#music-packs).
 - **Recorded soundtracks:** music stored in the WADs as Ogg Vorbis or
   MP3, such as `SIGIL_SHREDS.WAD` and the MP3 edition of SIGIL II, plays
   as recorded.
@@ -79,10 +83,10 @@ coexist on the XMB and keep their own savegames and configuration.
 
 | Package | APPID | Installs to |
 |---|---|---|
-| `CrispyDoom-1.5.pkg` | `CRISPDOOM` | `/dev_hdd0/game/CRISPDOOM/USRDIR/` |
-| `CrispyHeretic-1.5.pkg` | `CRISPHERE` | `/dev_hdd0/game/CRISPHERE/USRDIR/` |
-| `CrispyHexen-1.5.pkg` | `CRISPHEX1` | `/dev_hdd0/game/CRISPHEX1/USRDIR/` |
-| `CrispyStrife-1.5.pkg` | `CRISPSTRF` | `/dev_hdd0/game/CRISPSTRF/USRDIR/` |
+| `CrispyDoom-1.6.pkg` | `CRISPDOOM` | `/dev_hdd0/game/CRISPDOOM/USRDIR/` |
+| `CrispyHeretic-1.6.pkg` | `CRISPHERE` | `/dev_hdd0/game/CRISPHERE/USRDIR/` |
+| `CrispyHexen-1.6.pkg` | `CRISPHEX1` | `/dev_hdd0/game/CRISPHEX1/USRDIR/` |
+| `CrispyStrife-1.6.pkg` | `CRISPSTRF` | `/dev_hdd0/game/CRISPSTRF/USRDIR/` |
 
 Install from the XMB, then FTP your WADs into that folder. The launcher
 picks them up on the next boot — no configuration file to edit.
@@ -406,14 +410,18 @@ it. Songs that are MIDI or MUS keep using the chosen synth.
 
 Recorded versions of the soundtrack — such as the Roland SC-55 packs of
 [sc55.duke4.net](https://sc55.duke4.net/) — play instead of the MIDI when
-they are in the game's `USRDIR/music-packs/` folder (the PKG makes it),
-e.g. `/dev_hdd0/game/CRISPDOOM/USRDIR/music-packs/` for Doom.
+they are in:
+
+- the game's `USRDIR/music-packs/` (the PKG makes it), e.g.
+  `/dev_hdd0/game/CRISPDOOM/USRDIR/music-packs/` for Doom, or
+- `/dev_hdd0/data/crispycell/music/`, shared by the four games (made the
+  first time one starts).
 
 Each pack can go in a folder of its own, as it comes unzipped
-(`music-packs/doom1/`, `music-packs/doom2/`...), or straight in. Every
-song is looked for in all of them: a Doom pack plays in Doom, a Doom II
-pack in Doom II, and a song no pack has (a Doom II level with only the
-Doom pack there) plays as MIDI.
+(`doom1/`, `doom2/`, `heretic/`...), or straight in. Every song is looked
+for in all of them: a Doom pack plays in Doom, a Doom II pack in Doom II,
+and a song no pack has (a Doom II level with only the Doom pack there)
+plays as MIDI.
 
 The files can be **Ogg Vorbis**, **MP3** or **FLAC**. A song is loaded
 whole into memory when it starts playing: a FLAC takes several MB a
@@ -550,8 +558,8 @@ The `ps3/` directory holds everything specific to this port's build:
 - **`build.sh`** — builds and packages one engine end to end:
   `./ps3/build.sh doom`, `heretic`, `hexen` or `strife`. Rewrites
   `appid.mk`, reconfigures, clears the object tree when the engine changes,
-  builds, and packages `Crispy<Game>-1.5.pkg` in the project root.
-  `./ps3/build.sh strife-debug` makes `CrispyStrife-1.5-debug.pkg`, a
+  builds, and packages `Crispy<Game>-1.6.pkg` in the project root.
+  `./ps3/build.sh strife-debug` makes `CrispyStrife-1.6-debug.pkg`, a
   test build of Strife with cheats on the pad: hold L3 + R3 and press
   Triangle (god mode), Square (all weapons and ammo), Cross (next map) or
   Circle (all keys). L3 + R3 + Select, inside a level, starts an
@@ -561,7 +569,7 @@ The `ps3/` directory holds everything specific to this port's build:
   inventory and pop-ups, a save to the last slot ("AUTOTEST", which it
   overwrites) and its load, then the next map. Dialogues get answered on
   the way. Each step is logged as `[auto]`, with a heartbeat every 10 s.
-  `./ps3/build.sh hexen-debug` makes `CrispyHexen-1.5-debug.pkg`: Hexen
+  `./ps3/build.sh hexen-debug` makes `CrispyHexen-1.6-debug.pkg`: Hexen
   with the same crash trail (every Hexen function traced, dumped to the
   log if the game thread dies, with `ps3/tools/crashaddr.py` to name it),
   a watchdog that dumps it too after 20 s without a frame, and checks of

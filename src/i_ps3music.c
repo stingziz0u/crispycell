@@ -1257,7 +1257,8 @@ static void MakeFolders(void)
     static const char *dirs[] =
     {
         SF2_DIR,                        // the SoundFonts, for the four games
-        PS3_USRDIR "/music-packs",      // the PKG makes it too
+        SF2_DIR "/music",               // music packs for the four games
+        PS3_USRDIR "/music-packs",      // this game's (the PKG makes it too)
     };
     struct stat st;
     int i;
