@@ -104,8 +104,9 @@ extern int PS3MusicPack_Count(void);
 char *ps3_music_sf2 = "";
 
 // ps3_music_pack in the cfg: 1 = the music pack plays the songs it has
-// (the others, OPL), 0 = the pack is left alone. Offered in the Music
-// option after the SoundFonts when a pack is there.
+// (the others, the synth chosen before it: OPL or the SoundFont), 0 = the
+// pack is left alone. Offered in the Music option after the SoundFonts
+// when a pack is there.
 int ps3_music_pack = 1;
 
 static char sf2_names[SF2_MAX][SF2_NAMELEN];
@@ -1249,18 +1250,14 @@ static void StopSoundFontSong(void)
 // The module the engine sees
 // ---------------------------------------------------------------------
 
-// The folders the player fills, made on the first start (the PKG can't:
-// they are outside the game's own folder, shared by the four games).
+// The folders the player fills, made on the first start: the SoundFonts'
+// is outside the game's own folder (the PKG can't make it).
 static void MakeFolders(void)
 {
     static const char *dirs[] =
     {
-        SF2_DIR,
-        SF2_DIR "/music",
-        SF2_DIR "/music/doom",
-        SF2_DIR "/music/heretic",
-        SF2_DIR "/music/hexen",
-        SF2_DIR "/music/strife",
+        SF2_DIR,                        // the SoundFonts, for the four games
+        PS3_USRDIR "/music-packs",      // the PKG makes it too
     };
     struct stat st;
     int i;
@@ -1697,7 +1694,18 @@ const char *PS3_Music_SynthName(void)
 
     if (PackOn())
     {
-        return "MUSIC PACK";
+        // the pack, and what plays the songs it doesn't have
+        if (synth == NULL || synth_name[0] == '\0')
+        {
+            return "PACK + OPL";
+        }
+        M_snprintf(label, sizeof(label), "PACK + %s", synth_name);
+        n = strlen(label);
+        if (n > 4 && strcasecmp(label + n - 4, ".sf2") == 0)
+        {
+            label[n - 4] = '\0';
+        }
+        return label;
     }
     if (ps3_music_sf2 == NULL || ps3_music_sf2[0] == '\0')
     {
@@ -1752,46 +1760,63 @@ void PS3_Music_CycleSynth(int dir)
         return;         // nothing to switch to
     }
 
-    if (next > 0 && next != pack_pos)
-    {
-        f = LoadSoundFont(sf2_names[next - 1]);
-        if (f == NULL)
-        {
-            next = 0;   // broken file: OPL
-        }
-    }
-
-    // Stop whichever synth is playing, then swap.
-    music_opl_module.StopSong();
-
-    Lock();
-    StopSoundFontSong();
-    old = synth;
-    synth = f;
-    M_StringCopy(synth_name, next > 0 && next != pack_pos ? sf2_names[next - 1] : "",
-                 sizeof(synth_name));
-    Unlock();
-
-    if (old != NULL)
-    {
-        // the memory back: a big SoundFont is a good part of the PS3's
-        tsf_close(old);
-        MemLog("SoundFont closed");
-    }
-
     if (next == pack_pos)
     {
+        // The pack on top of the synth playing now: it plays the songs the
+        // pack doesn't have (a Doom II level with only a Doom pack).
         ps3_music_pack = 1;
-        ps3_music_sf2 = M_StringDuplicate("");
-        PS3_Log("[music] now the music pack (OPL for the songs it lacks)");
+        music_opl_module.StopSong();
+        Lock();
+        StopSoundFontSong();
+        Unlock();
+        PS3_Log("[music] now the music pack (%s for the songs it lacks)",
+                synth != NULL ? synth_name : "OPL");
     }
     else
     {
+        boolean same = next > 0 && synth != NULL
+                    && strcasecmp(synth_name, sf2_names[next - 1]) == 0;
+
         if (ps3_music_pack && pack_pos > 0)
         {
             UnloadPackSongs();
         }
         ps3_music_pack = 0;
+
+        if (next > 0 && !same)
+        {
+            f = LoadSoundFont(sf2_names[next - 1]);
+            if (f == NULL)
+            {
+                next = 0;   // broken file: OPL
+            }
+        }
+
+        // Stop whichever synth is playing, then swap.
+        music_opl_module.StopSong();
+
+        Lock();
+        StopSoundFontSong();
+        if (!same)
+        {
+            old = synth;
+            synth = f;
+            M_StringCopy(synth_name, next > 0 ? sf2_names[next - 1] : "",
+                         sizeof(synth_name));
+        }
+        else
+        {
+            old = NULL;
+        }
+        Unlock();
+
+        if (old != NULL)
+        {
+            // the memory back: a big SoundFont is a good part of the PS3's
+            tsf_close(old);
+            MemLog("SoundFont closed");
+        }
+
         ps3_music_sf2 = M_StringDuplicate(next > 0 ? sf2_names[next - 1] : "");
         PS3_Log("[music] now %s", next > 0 ? ps3_music_sf2 : "OPL");
     }

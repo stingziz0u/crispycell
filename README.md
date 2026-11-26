@@ -406,14 +406,14 @@ it. Songs that are MIDI or MUS keep using the chosen synth.
 
 Recorded versions of the soundtrack — such as the Roland SC-55 packs of
 [sc55.duke4.net](https://sc55.duke4.net/) — play instead of the MIDI when
-they are in:
+they are in the game's `USRDIR/music-packs/` folder (the PKG makes it),
+e.g. `/dev_hdd0/game/CRISPDOOM/USRDIR/music-packs/` for Doom.
 
-- `/dev_hdd0/data/crispycell/music/doom/` (or `heretic/`, `hexen/`,
-  `strife/`) for one game, or
-- `/dev_hdd0/data/crispycell/music/` for all of them.
-
-The game makes these folders the first time it starts: copy the pack's
-files into the one of its game.
+Each pack can go in a folder of its own, as it comes unzipped
+(`music-packs/doom1/`, `music-packs/doom2/`...), or straight in. Every
+song is looked for in all of them: a Doom pack plays in Doom, a Doom II
+pack in Doom II, and a song no pack has (a Doom II level with only the
+Doom pack there) plays as MIDI.
 
 The files can be **Ogg Vorbis**, **MP3** or **FLAC**. A song is loaded
 whole into memory when it starts playing: a FLAC takes several MB a
@@ -436,9 +436,11 @@ tags (`LOOP_START` / `LOOP_END`, or `LOOPSTART` / `LOOPLENGTH`); without
 them the song loops from the top.
 
 With a pack there, **Crispness -> Audible -> Music** goes OPL -> each
-SoundFont -> **MUSIC PACK**, and can be switched while playing: with the
-pack, the songs it has play recorded and the ones it lacks play on OPL.
-The log lists what was found (`[musicpack]`).
+SoundFont -> **PACK + ...**, and can be switched while playing: with the
+pack, the songs it has play recorded and the ones it lacks play on the
+synth chosen before it (`PACK + OPL`, or `PACK + ` the SoundFont, which
+stays loaded: a big SoundFont leaves little memory for a FLAC song). The
+log lists what was found (`[musicpack]`).
 
 A pack that comes as a WAD (such as `kexdoom_sc55_ogg.wad`) needs none of
 this: load it as a PWAD, its Ogg lumps play as recorded.

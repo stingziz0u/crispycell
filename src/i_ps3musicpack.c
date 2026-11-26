@@ -48,7 +48,7 @@
 
 extern void PS3_Log(const char *fmt, ...);
 
-#define PACK_ROOT "/dev_hdd0/data/crispycell/music"
+#define PACK_ROOT PS3_USRDIR "/music-packs"
 
 #if defined(PS3_GAME_HERETIC)
 #define PACK_GAME "heretic"
@@ -60,7 +60,7 @@ extern void PS3_Log(const char *fmt, ...);
 #define PACK_GAME "doom"
 #endif
 
-#define MAX_DIRS 4
+#define MAX_DIRS 32
 
 typedef struct
 {
@@ -397,32 +397,89 @@ static boolean FindNoCase(const char *dir, const char *relpath,
 }
 
 // The subfolder name of dir, matched without case ("Music", "MUSIC").
-static boolean FindSubdirNoCase(const char *dir, const char *name,
-                                char *out, size_t outlen)
+static boolean IsAudioName(const char *name, boolean *flac)
 {
-    DIR *d = opendir(dir);
-    struct dirent *e;
-    boolean found = false;
+    size_t n = strlen(name);
 
-    if (d == NULL)
+    *flac = n > 5 && strcasecmp(name + n - 5, ".flac") == 0;
+    return *flac || (n > 4 && (strcasecmp(name + n - 4, ".ogg") == 0
+                            || strcasecmp(name + n - 4, ".mp3") == 0));
+}
+
+// A pack whose files carry the song's name among other words
+// ("D_E1M1 - At Doom's Gate.ogg", "01 Hangar (e1m1).mp3"): a file with a
+// word (letters and digits) equal to the song's name without its d_ /
+// mus_ prefix. Only names with a digit or of 5 letters or more ("e1m1",
+// "runnin"), so "doom" doesn't take any file of a Doom pack. Ogg and MP3
+// before FLAC.
+static boolean MatchWord(const char *dir, const char *bare,
+                         char *out, size_t outlen)
+{
+    size_t blen = strlen(bare);
+    boolean digit = false;
+    int pass;
+    size_t i;
+
+    for (i = 0; i < blen; i++)
+    {
+        if (isdigit((unsigned char) bare[i]))
+        {
+            digit = true;
+        }
+        else if (!isalnum((unsigned char) bare[i]))
+        {
+            return false;   // the_da and such: no single word
+        }
+    }
+    if (blen == 0 || (!digit && blen < 5))
     {
         return false;
     }
-    while ((e = readdir(d)) != NULL)
+
+    for (pass = 0; pass < 2; pass++)
     {
-        if (strcasecmp(e->d_name, name) == 0)
+        DIR *d = opendir(dir);
+        struct dirent *e;
+
+        if (d == NULL)
         {
-            M_snprintf(out, outlen, "%s/%s", dir, e->d_name);
-            found = IsDir(out);
-            if (found)
+            return false;
+        }
+        while ((e = readdir(d)) != NULL)
+        {
+            const char *p = e->d_name, *end;
+            boolean flac;
+
+            if (!IsAudioName(e->d_name, &flac) || flac != (pass == 1))
             {
-                break;
+                continue;
+            }
+            end = strrchr(e->d_name, '.');
+            while (p < end)
+            {
+                const char *w;
+
+                while (p < end && !isalnum((unsigned char) *p))
+                {
+                    p++;
+                }
+                w = p;
+                while (p < end && isalnum((unsigned char) *p))
+                {
+                    p++;
+                }
+                if ((size_t) (p - w) == blen && strncasecmp(w, bare, blen) == 0)
+                {
+                    M_snprintf(out, outlen, "%s/%s", dir, e->d_name);
+                    closedir(d);
+                    return true;
+                }
             }
         }
+        closedir(d);
     }
-    closedir(d);
 
-    return found;
+    return false;
 }
 
 // A file name of a pack: ".{ext}" tries .ogg then .mp3; a .flac (not
@@ -489,6 +546,10 @@ static boolean ResolveName(const char *dir, const char *name,
             {
                 return true;
             }
+        }
+        if (MatchWord(dir, bare != NULL ? bare : base, out, outlen))
+        {
+            return true;
         }
     }
 
@@ -592,17 +653,66 @@ static int ReadConfig(const char *dir, const char *file)
     return subst_len - before;
 }
 
-static void ScanDir(const char *dir)
+static void ScanDir(const char *dir, int depth)
 {
     DIR *d;
     struct dirent *e;
-    int i, before;
+    int i, before, audio = 0;
+    char sample[3][64];
 
     if (!IsDir(dir) || num_dirs >= MAX_DIRS)
     {
         return;
     }
     M_StringCopy(dirs[num_dirs++], dir, sizeof(dirs[0]));
+
+    // What is in it, for the log.
+    d = opendir(dir);
+    if (d != NULL)
+    {
+        while ((e = readdir(d)) != NULL)
+        {
+            boolean flac;
+
+            if (IsAudioName(e->d_name, &flac))
+            {
+                if (audio < 3)
+                {
+                    M_StringCopy(sample[audio], e->d_name, sizeof(sample[0]));
+                }
+                audio++;
+            }
+        }
+        closedir(d);
+    }
+    PS3_Log("[musicpack] %s: %d audio file(s)%s%s%s%s%s%s", dir, audio,
+            audio > 0 ? ", e.g. " : "", audio > 0 ? sample[0] : "",
+            audio > 1 ? ", " : "", audio > 1 ? sample[1] : "",
+            audio > 2 ? ", " : "", audio > 2 ? sample[2] : "");
+    // Each folder in it is a pack of its own (doom1/, doom2/...), two
+    // levels down (a zip's pack/music/ folder).
+    if (depth < 2)
+    {
+        d = opendir(dir);
+        if (d != NULL)
+        {
+            char sub[512];
+
+            while ((e = readdir(d)) != NULL)
+            {
+                if (e->d_name[0] == '.')
+                {
+                    continue;
+                }
+                M_snprintf(sub, sizeof(sub), "%s/%s", dir, e->d_name);
+                if (IsDir(sub))
+                {
+                    ScanDir(sub, depth + 1);
+                }
+            }
+            closedir(d);
+        }
+    }
 
     // The pack's own configs first: they win over the file names.
     d = opendir(dir);
@@ -639,29 +749,15 @@ static void ScanDir(const char *dir)
 
 void PS3MusicPack_Init(void)
 {
-    char game[256], sub[256];
-
     if (initialized)
     {
         return;
     }
     initialized = true;
 
-    // music/<game>/ (any case), then music/; and the music/ folder the
-    // zipped packs keep the songs in, inside each
-    if (FindSubdirNoCase(PACK_ROOT, PACK_GAME, game, sizeof(game)))
-    {
-        ScanDir(game);
-        if (FindSubdirNoCase(game, "music", sub, sizeof(sub)))
-        {
-            ScanDir(sub);
-        }
-    }
-    ScanDir(PACK_ROOT);
-    if (FindSubdirNoCase(PACK_ROOT, "music", sub, sizeof(sub)))
-    {
-        ScanDir(sub);
-    }
+    // USRDIR/music-packs of this game (made by the PKG): the packs, each in
+    // a folder of its own or straight in it. A song no pack has stays MIDI.
+    ScanDir(PACK_ROOT, 0);
 
     if (num_dirs == 0)
     {

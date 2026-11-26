@@ -76,6 +76,8 @@ make "crispy-$GAME" 2>&1 | tail -3
 # Test builds of 1.2 packed a SoundFont from here; the packages carry
 # none now (the player puts it in /dev_hdd0/data/crispycell/).
 rm -rf "$ROOT/pkgfiles-$GAME/USRDIR/soundfonts"
+# The music packs' folder, empty: the player copies a pack into it.
+mkdir -p "$ROOT/pkgfiles-$GAME/USRDIR/music-packs"
 
 cd src
 rm -rf build "crispy-$GAME.self" "crispy-$GAME.pkg" \
