@@ -1770,6 +1770,7 @@ static default_t extra_defaults_list[] =
     //
 
     CONFIG_VARIABLE_STRING(ps3_music_sf2),
+    CONFIG_VARIABLE_INT(ps3_music_pack),
 
     //!
     // @game strife

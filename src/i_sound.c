@@ -599,6 +599,7 @@ void I_BindSoundVariables(void)
     M_BindIntVariable("gus_ram_kb",              &gus_ram_kb);
 #ifdef PS3_BUILD
     M_BindStringVariable("ps3_music_sf2",        &ps3_music_sf2);
+    M_BindIntVariable("ps3_music_pack",          &ps3_music_pack);
 #endif
 #ifdef _WIN32
     M_BindStringVariable("winmm_midi_device",    &winmm_midi_device);

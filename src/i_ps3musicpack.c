@@ -430,7 +430,8 @@ static boolean FindSubdirNoCase(const char *dir, const char *name,
 static boolean ResolveName(const char *dir, const char *name,
                            char *out, size_t outlen)
 {
-    static const char *exts[] = { ".ogg", ".mp3" };
+    // the lighter ones first: a FLAC goes whole into memory
+    static const char *exts[] = { ".ogg", ".mp3", ".flac" };
     char base[256];
     size_t len = strlen(name);
     int i;
@@ -670,6 +671,16 @@ void PS3MusicPack_Init(void)
     {
         PS3_Log("[musicpack] %d song(s) in the music packs", subst_len);
     }
+}
+
+// Songs the music packs have (0 = no pack: not offered in the menu).
+int PS3MusicPack_Count(void)
+{
+    if (!initialized)
+    {
+        PS3MusicPack_Init();
+    }
+    return subst_len;
 }
 
 // The lump the engine cached at this address, to try its name.

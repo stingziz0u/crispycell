@@ -412,14 +412,19 @@ they are in:
   `strife/`) for one game, or
 - `/dev_hdd0/data/crispycell/music/` for all of them.
 
-The files can be **Ogg Vorbis** or **MP3** (FLAC is not played: convert it,
-or use the pack's Ogg version). Each song is found the way Chocolate Doom
-does it:
+The game makes these folders the first time it starts: copy the pack's
+files into the one of its game.
+
+The files can be **Ogg Vorbis**, **MP3** or **FLAC**. A song is loaded
+whole into memory when it starts playing: a FLAC takes several MB a
+minute, so the Ogg or MP3 version of a pack is the lighter choice (the
+log says how much memory is in use and free after each song, `[mem]`).
+Each song is found the way Chocolate Doom does it:
 
 1. A pack's `.cfg` files in that folder (`<SHA1> = <file>`, the format of
    the [chocolate-doom/music-packs](https://github.com/chocolate-doom/music-packs)
-   configs). A `.cfg` that names a `.flac` also tries the same name in
-   `.ogg` and `.mp3`.
+   configs). A `.cfg` that names a `.flac` tries the same name in `.ogg`
+   and `.mp3` first.
 2. Otherwise, the file name of the original song: `d_e1m1.ogg`,
    `d_runnin.ogg`, `mus_e1m1.ogg`, `winnowr.ogg`... with or without the
    `d_` / `mus_` prefix. A zipped pack can be unpacked as it is: a
@@ -428,10 +433,12 @@ does it:
 
 Names are matched without case. Loop points are read from the file's
 tags (`LOOP_START` / `LOOP_END`, or `LOOPSTART` / `LOOPLENGTH`); without
-them the song loops from the top. A pack song plays whatever the Music
-option says, and songs the pack does not have use the chosen synth. The
-log lists what was found (`[musicpack]`). To go back to the MIDI, move
-the folder away.
+them the song loops from the top.
+
+With a pack there, **Crispness -> Audible -> Music** goes OPL -> each
+SoundFont -> **MUSIC PACK**, and can be switched while playing: with the
+pack, the songs it has play recorded and the ones it lacks play on OPL.
+The log lists what was found (`[musicpack]`).
 
 A pack that comes as a WAD (such as `kexdoom_sc55_ogg.wad`) needs none of
 this: load it as a PWAD, its Ogg lumps play as recorded.

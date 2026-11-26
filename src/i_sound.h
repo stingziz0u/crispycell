@@ -269,6 +269,7 @@ extern const music_module_t music_opl_module;
 // [PS3] OPL or SoundFont music (i_ps3music.c)
 extern const music_module_t music_ps3_module;
 extern char *ps3_music_sf2;
+extern int ps3_music_pack;
 const char *PS3_Music_SynthName(void);
 void PS3_Music_CycleSynth(int dir);
 #endif
